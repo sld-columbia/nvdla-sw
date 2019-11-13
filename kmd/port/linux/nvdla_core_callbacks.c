@@ -345,6 +345,10 @@ static const struct of_device_id nvdla_of_match[] = {
 		.compatible = "nvidia,nvdla_2",
 		.data = &nvdla_config_small,
 	},
+	{
+		.compatible = "nvidia,nv_nvdla",
+		.data = &nvdla_config_small,
+	},
 	{ },
 };
 
