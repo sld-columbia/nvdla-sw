@@ -437,8 +437,8 @@ int32_t nvdla_drm_probe(struct nvdla_device *nvdla_dev)
 	 * TODO Register separate driver for memory and use DT node to
 	 * read memory range
 	 */
-	dma = dma_declare_coherent_memory(drm->dev, 0xC0000000, 0xC0000000,
-			0x40000000);
+	dma = dma_declare_coherent_memory(drm->dev, 0xb0000000, 0xb0000000,
+			0x10000000);
 	if (dma) {
 		err = -ENOMEM;
 		goto unref;
