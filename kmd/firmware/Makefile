@@ -26,6 +26,7 @@
 
 ccflags-y += -I$(src)/../../firmware/include
 ccflags-y += -I$(src)/../../firmware
+ccflags-y += -DDLA_2_CONFIG
 
 opendla-y += ../../firmware/scheduler.o
 opendla-y += ../../firmware/engine.o
