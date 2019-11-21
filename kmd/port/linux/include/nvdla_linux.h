@@ -40,6 +40,9 @@
 #include <linux/kref.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+#include <linux/slab.h>
+#include <linux/dma-mapping.h>
+#include <linux/uaccess.h>
 
 /**
  * @brief			Task information submitted from user space
