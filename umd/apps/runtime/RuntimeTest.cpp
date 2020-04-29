@@ -369,8 +369,8 @@ void unloadLoadable(const TestAppArgs* appArgs, TestInfo *i)
 
 double get_elapsed_time(struct timespec *before, struct timespec *after)
 {
-  double deltat_s  = (after->tv_sec - before->tv_sec) * 1000000;
-  double deltat_ns = (after->tv_nsec - before->tv_nsec) / 1000;
+  double deltat_s  = (after->tv_sec - before->tv_sec);
+  double deltat_ns = (after->tv_nsec - before->tv_nsec) / (double) 1000000000;
   return deltat_s + deltat_ns;
 }
 
