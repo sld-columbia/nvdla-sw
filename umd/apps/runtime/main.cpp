@@ -167,6 +167,17 @@ int main(int argc, char* argv[])
 
             testAppArgs.normalize_value = atoi(argv[++ii]);
         }
+        else if (std::strcmp(arg, "--instance") == 0) // normalize value
+        {
+            if (ii+1 >= argc)
+            {
+                // Expecting another parameter
+                showHelp = true;
+                break;
+            }
+
+            testAppArgs.instance = atoi(argv[++ii]);
+        }
         else if (std::strcmp(arg, "--mean") == 0) // Mean
         {
             if (ii+1 >= argc)

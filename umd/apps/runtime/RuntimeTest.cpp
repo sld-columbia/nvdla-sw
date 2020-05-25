@@ -33,6 +33,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "nvdla/IRuntime.h"
 
@@ -349,7 +350,7 @@ NvDlaError loadLoadable(const TestAppArgs* appArgs, TestInfo* i)
     if (!runtime)
         ORIGINATE_ERROR_FAIL(NvDlaError_BadParameter, "getRuntime() failed");
 
-    if (!runtime->load(i->pData, 0))
+    if (!runtime->load(i->pData, appArgs->instance))
         ORIGINATE_ERROR_FAIL(NvDlaError_BadParameter, "runtime->load failed");
 
 fail:
@@ -397,6 +398,7 @@ NvDlaError runTest(const TestAppArgs* appArgs, TestInfo* i)
         ORIGINATE_ERROR(NvDlaError_BadParameter, "runtime->submit() failed");
 
     clock_gettime(CLOCK_MONOTONIC, &after);
+
     NvDlaDebugPrintf("execution time = %f s\n", get_elapsed_time(&before,&after));
 
     PROPAGATE_ERROR_FAIL(DlaBuffer2DIMG(&pOutputBuffer, i->outputImage));

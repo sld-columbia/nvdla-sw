@@ -141,6 +141,8 @@ Runtime::Runtime() :
 {
     m_dla_device_handles[0] = 0;
     m_dla_device_handles[1] = 0;
+    m_dla_device_handles[2] = 0;
+    m_dla_device_handles[3] = 0;
     m_loaded = 0;
 }
 
@@ -149,6 +151,8 @@ Runtime::~Runtime()
     // Close all device nodes
     NvDlaClose(m_dla_device_handles[0]);
     NvDlaClose(m_dla_device_handles[1]);
+    NvDlaClose(m_dla_device_handles[2]);
+    NvDlaClose(m_dla_device_handles[3]);
 }
 
 bool Runtime::initEMU(void)
@@ -159,7 +163,7 @@ bool Runtime::initEMU(void)
     if (!m_emu_engine)
     {
         m_emu_engine = new Emulator();
-        m_emu_engine->start();
+	m_emu_engine->start();
 
         // Wait for emulator engine to warm up
         // We should have the ability to timeout here
@@ -200,7 +204,7 @@ void *Runtime::getDLADeviceContext(size_t sel_i)
     bool ok = true;
     NvDlaError err;
 
-    if (sel_i > 0) {
+    if (sel_i >= getMaxDLADevices()) {
         ok = false;
         goto done;
     }

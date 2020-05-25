@@ -46,6 +46,7 @@ struct TestAppArgs
     std::string loadableName;
     NvS32 serverPort;
     NvU8 normalize_value;
+    NvU32 instance;
     float mean[4];
     bool rawOutputDump;
 
@@ -55,6 +56,7 @@ struct TestAppArgs
         loadableName(""),
         serverPort(6666),
         normalize_value(1),
+	instance(0),
         mean{0.0, 0.0, 0.0, 0.0},
         rawOutputDump(false)
     {}

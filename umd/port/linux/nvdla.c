@@ -50,7 +50,8 @@
 #include "nvdla_ioctl.h"
 #include "nvdla_os_inf.h"
 
-#define NVDLA_DEVICE_NODE "/dev/dri/renderD128"
+#define NVDLA_DEVICE_NODE_NUM 128
+#define NVDLA_DEVICE_NODE_STR "/dev/dri/renderD"
 
 #define NVDLA_MEM_READ (PROT_READ)
 #define NVDLA_MEM_WRITE (PROT_WRITE)
@@ -232,8 +233,10 @@ NvDlaOpen(void *session_handle, NvU32 instance, void **device_handle)
 {
     NvDlaContext *pContext = NULL;
     NvDlaError e = NvDlaSuccess;
+    NvU32 device_node_num;
+    char device_node[100];
 
-    if (instance > 0)
+    if (instance >= 4)
         return NvDlaError_BadParameter;
 
     if (!device_handle)
@@ -246,12 +249,14 @@ NvDlaOpen(void *session_handle, NvU32 instance, void **device_handle)
 
     NvDlaMemset(pContext, 0, sizeof(NvDlaContext));
 
-    pContext->fd = open(NVDLA_DEVICE_NODE, O_RDWR);
+    device_node_num = NVDLA_DEVICE_NODE_NUM + instance;
+
+    pContext->fd = open(device_node, O_RDWR);
     if (pContext->fd < 0) {
         e = NvDlaError_ResourceError;
         goto fail;
     }
-
+    
     *device_handle = (void *)pContext;
 
     return NvDlaSuccess;

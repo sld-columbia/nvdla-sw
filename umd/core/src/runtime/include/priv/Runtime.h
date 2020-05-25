@@ -123,10 +123,10 @@ protected:
     NvDlaError submitInternal(void);
 
     virtual void *getDLADeviceContext(size_t sel_i);
-    size_t getMaxDLADevices() { return 1; }
+    size_t getMaxDLADevices() { return 4; }
 
     void *m_dla_handle;
-    void *m_dla_device_handles[2];
+    void *m_dla_device_handles[4];
     Emulator *m_emu_engine;
 
     void *h_network_desc_mem;
