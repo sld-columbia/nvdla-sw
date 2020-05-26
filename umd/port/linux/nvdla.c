@@ -250,12 +250,15 @@ NvDlaOpen(void *session_handle, NvU32 instance, void **device_handle)
     NvDlaMemset(pContext, 0, sizeof(NvDlaContext));
 
     device_node_num = NVDLA_DEVICE_NODE_NUM + instance;
+    sprintf(device_node, "%s%d", NVDLA_DEVICE_NODE_STR, device_node_num);
 
     pContext->fd = open(device_node, O_RDWR);
     if (pContext->fd < 0) {
         e = NvDlaError_ResourceError;
         goto fail;
     }
+
+    /* printf("%d %s %d %p\n", instance, device_node, pContext->fd, pContext); */
     
     *device_handle = (void *)pContext;
 
