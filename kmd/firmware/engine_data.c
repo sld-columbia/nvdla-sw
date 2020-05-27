@@ -1001,15 +1001,11 @@ static struct dla_engine engine[MAX_N_NVDLA] = {
 
 struct dla_engine *dla_get_engine(int32_t nvdla_minor)
 {
-	dla_info("DLA GET ENGINE: minor %d\n", nvdla_minor);
-
 	return &engine[nvdla_minor];
 }
 
 int32_t dla_register_driver(void **engine_context, void *driver_context, int32_t nvdla_minor)
 {
-	dla_info("DLA REGISTER DRIVER: minor %d\n", nvdla_minor);
-
 	*engine_context = &engine[nvdla_minor];
 	engine[nvdla_minor].task = &global_task[nvdla_minor];
 	engine[nvdla_minor].driver_context = driver_context;
@@ -1026,14 +1022,10 @@ int32_t dla_register_driver(void **engine_context, void *driver_context, int32_t
 
 uint32_t reg_read(uint32_t addr, int32_t nvdla_minor)
 {
-	dla_info("REG READ: minor %d\n", nvdla_minor);
-
 	return dla_reg_read(engine[nvdla_minor].driver_context, addr);
 }
 
 void reg_write(uint32_t addr, uint32_t reg, int32_t nvdla_minor)
 {
-	dla_info("REG WRITE: minor %d\n", nvdla_minor);
-
 	dla_reg_write(engine[nvdla_minor].driver_context, addr, reg);
 }
