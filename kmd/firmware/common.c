@@ -89,20 +89,20 @@ static const uint16_t lo_slope_shift_offset[] = {
 };
 
 void update_lut(uint32_t reg_base, struct dla_lut_param *lut,
-							uint8_t precision)
+		uint8_t precision, int32_t nvdla_minor)
 {
 	int32_t i;
 	uint32_t reg;
 	uint32_t high, low;
 	int32_t is_sdp = reg_base == SDP_S_LUT_ACCESS_CFG_0;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	/* program raw table */
 	reg = (FIELD_ENUM(CDP_S_LUT_ACCESS_CFG_0, LUT_TABLE_ID, LE)
 		<< SHIFT(CDP_S_LUT_ACCESS_CFG_0, LUT_TABLE_ID)) |
 		(FIELD_ENUM(CDP_S_LUT_ACCESS_CFG_0, LUT_ACCESS_TYPE, WRITE)
 		<< SHIFT(CDP_S_LUT_ACCESS_CFG_0, LUT_ACCESS_TYPE));
-	reg_write(reg_base, reg);
+	reg_write(reg_base, reg, nvdla_minor);
 
 	for (i = 0; i < (1<<LUT_LINEAR_EXP_TABLE_ENTRY_LOG2)+1; i++) {
 		dla_reg_write(engine->driver_context,

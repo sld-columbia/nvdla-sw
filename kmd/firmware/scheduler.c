@@ -37,12 +37,12 @@
 
 #define MAX_NUM_ADDRESSES	256
 
-static uint64_t roi_array_length __aligned(8);
-static struct dla_network_desc network;
+static uint64_t roi_array_length[MAX_N_NVDLA] __aligned(8);
+static struct dla_network_desc network[MAX_N_NVDLA];
 
 static int
 dla_update_consumers(struct dla_processor_group *group,
-			struct dla_common_op_desc *op, uint8_t event);
+		     struct dla_common_op_desc *op, uint8_t event, int32_t nvdla_minor);
 
 static int32_t
 dla_read_address_list(struct dla_engine *engine)
@@ -74,7 +74,7 @@ exit:
 }
 
 static int
-dla_op_enabled(struct dla_processor_group *group)
+dla_op_enabled(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret;
 	struct dla_common_op_desc *op_desc;
@@ -85,7 +85,7 @@ dla_op_enabled(struct dla_processor_group *group)
 	group->active = 1;
 
 	/* update dependency graph for this task */
-	ret = dla_update_consumers(group, op_desc, DLA_EVENT_OP_ENABLED);
+	ret = dla_update_consumers(group, op_desc, DLA_EVENT_OP_ENABLED, nvdla_minor);
 	dla_debug("Exit: %s\n", __func__);
 
 	RETURN(ret);
@@ -94,7 +94,7 @@ dla_op_enabled(struct dla_processor_group *group)
 static int
 dla_op_programmed(struct dla_processor *processor,
 		  struct dla_processor_group *group,
-		  uint8_t rdma_id)
+		  uint8_t rdma_id, int32_t nvdla_minor)
 {
 	int32_t ret;
 	struct dla_common_op_desc *op_desc;
@@ -105,7 +105,7 @@ dla_op_programmed(struct dla_processor *processor,
 	group->pending = 0;
 
 	/* update dependency graph for this task */
-	ret = dla_update_consumers(group, op_desc, DLA_EVENT_OP_PROGRAMMED);
+	ret = dla_update_consumers(group, op_desc, DLA_EVENT_OP_PROGRAMMED, nvdla_minor);
 	dla_debug("Exit: %s\n", __func__);
 
 	RETURN(ret);
@@ -113,7 +113,7 @@ dla_op_programmed(struct dla_processor *processor,
 
 static int32_t
 dla_read_config(struct dla_task *task, struct dla_processor *processor,
-					struct dla_processor_group *group)
+		struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret;
 	uint64_t base;
@@ -123,7 +123,7 @@ dla_read_config(struct dla_task *task, struct dla_processor *processor,
 
 	dla_debug("Enter: %s\n", __func__);
 
-	engine = dla_get_engine();
+	engine = dla_get_engine(nvdla_minor);
 
 	roi_index = group->roi_index;
 	index = group->op_desc->index;
@@ -176,32 +176,33 @@ exit:
 }
 
 static void
-dla_reset_group(struct dla_processor_group *group)
+dla_reset_group(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t i;
 
 	for (i = 0; i < DLA_OP_NUM; i++) {
-		dla_put_op_desc(group->consumers[i]);
+	    dla_put_op_desc(group->consumers[i], nvdla_minor);
 		group->consumers[i] = NULL;
 	}
 
-	dla_put_op_desc(group->fused_parent);
+	dla_put_op_desc(group->fused_parent, nvdla_minor);
 	group->fused_parent = NULL;
 
-	dla_put_op_desc(group->op_desc);
+	dla_put_op_desc(group->op_desc, nvdla_minor);
 	group->op_desc = NULL;
 }
 
 static int
 dla_prepare_operation(struct dla_processor *processor,
-			struct dla_common_op_desc *op_desc,
-			uint8_t roi_index, uint32_t *group_number)
+		      struct dla_common_op_desc *op_desc,
+		      uint8_t roi_index, uint32_t *group_number,
+		      int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint8_t group_id;
 	uint8_t rdma_id;
 	struct dla_processor_group *group;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -209,7 +210,7 @@ dla_prepare_operation(struct dla_processor *processor,
 	 * If not already programmed then find out if
 	 * processor is free and which group is free
 	 */
-	ret = utils_get_free_group(processor, &group_id, &rdma_id);
+	ret = utils_get_free_group(processor, &group_id, &rdma_id, nvdla_minor);
 	if (ret) {
 		dla_debug("processor:%s register groups are busy\n",
 			processor->name);
@@ -225,12 +226,12 @@ dla_prepare_operation(struct dla_processor *processor,
 	 * update operation descriptor
 	 */
 	group->op_desc = op_desc;
-	dla_get_refcount(op_desc);
+	dla_get_refcount(op_desc, nvdla_minor);
 	group->id = group_id;
 	group->roi_index = roi_index;
 	group->rdma_id = rdma_id;
 
-	ret = dla_read_config(engine->task, processor, group);
+	ret = dla_read_config(engine->task, processor, group, nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -252,12 +253,13 @@ exit:
 
 static int
 dla_program_operation(struct dla_processor *processor,
-			struct dla_processor_group *group)
+		      struct dla_processor_group *group,
+		      int32_t nvdla_minor)
 {
 	int32_t i;
 	int32_t ret = 0;
 	struct dla_common_op_desc *op_desc;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -271,12 +273,12 @@ dla_program_operation(struct dla_processor *processor,
 
 	op_desc = group->op_desc;
 
-	processor->set_producer(group->id, group->rdma_id);
+	processor->set_producer(group->id, group->rdma_id, nvdla_minor);
 
 	LOG_EVENT(group->roi_index, group->id, processor->op_type,
 						LOG_PROGRAM_START);
 
-	ret = processor->program(group);
+	ret = processor->program(group, nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -288,14 +290,14 @@ dla_program_operation(struct dla_processor *processor,
 	 */
 	for (i = 0; i < DLA_OP_NUM; i++) {
 		group->consumers[i] = dla_get_op_desc(engine->task,
-					op_desc->consumers[i].index, i,
-					group->roi_index);
+						      op_desc->consumers[i].index, i,
+						      group->roi_index, nvdla_minor);
 	}
 
 	group->fused_parent = dla_get_op_desc(engine->task,
-					op_desc->fused_parent.index,
-					op_desc->op_type - 1,
-					group->roi_index);
+					      op_desc->fused_parent.index,
+					      op_desc->op_type - 1,
+					      group->roi_index, nvdla_minor);
 
 	if (group->fused_parent != NULL) {
 		if (group->fused_parent->op_type != (op_desc->op_type - 1)) {
@@ -305,7 +307,7 @@ dla_program_operation(struct dla_processor *processor,
 		}
 	}
 
-	ret = dla_op_programmed(processor, group, group->rdma_id);
+	ret = dla_op_programmed(processor, group, group->rdma_id, nvdla_minor);
 	if (!ret)
 		goto exit;
 
@@ -317,7 +319,8 @@ exit:
 
 static int
 dla_enable_operation(struct dla_processor *processor,
-			struct dla_common_op_desc *op_desc)
+		     struct dla_common_op_desc *op_desc,
+		     int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	int32_t group_id;
@@ -331,7 +334,7 @@ dla_enable_operation(struct dla_processor *processor,
 	 * If some operation has reported error then skip
 	 * enabling next operations
 	 */
-	engine = dla_get_engine();
+	engine = dla_get_engine(nvdla_minor);
 	if (engine->status)
 		goto exit;
 
@@ -381,16 +384,16 @@ enable_op:
 					group->op_desc->index,
 					group->roi_index);
 
-	processor->set_producer(group->id, group->rdma_id);
+	processor->set_producer(group->id, group->rdma_id, nvdla_minor);
 
 	LOG_EVENT(group->roi_index, group->id, processor->op_type,
 						LOG_OPERATION_START);
 
-	ret = processor->enable(group);
+	ret = processor->enable(group, nvdla_minor);
 	if (ret)
 		goto exit;
 
-	ret = dla_op_enabled(group);
+	ret = dla_op_enabled(group, nvdla_minor);
 exit:
 	dla_debug("Exit: %s status=%d\n", __func__, ret);
 	RETURN(ret);
@@ -398,8 +401,9 @@ exit:
 
 static int
 dla_submit_operation(struct dla_processor *processor,
-			struct dla_common_op_desc *op_desc,
-			uint8_t roi_index)
+		     struct dla_common_op_desc *op_desc,
+		     uint8_t roi_index,
+		     int32_t nvdla_minor)
 {
 	int32_t err;
 	uint32_t group_id = 0;
@@ -409,19 +413,19 @@ dla_submit_operation(struct dla_processor *processor,
 	dla_info("Prepare %s operation index %d ROI %d dep_count %d\n",
 			processor->name, op_desc->index, roi_index,
 			op_desc->dependency_count);
-	err = dla_prepare_operation(processor, op_desc, roi_index, &group_id);
+	err = dla_prepare_operation(processor, op_desc, roi_index, &group_id, nvdla_minor);
 	if (err)
 		goto exit;
 
 	if (!processor->is_ready(processor, &processor->groups[group_id]))
 		goto exit;
 
-	err = dla_program_operation(processor, &processor->groups[group_id]);
+	err = dla_program_operation(processor, &processor->groups[group_id], nvdla_minor);
 	if (err)
 		goto exit;
 
 	if (op_desc->dependency_count == 0)
-		err = dla_enable_operation(processor, op_desc);
+	        err = dla_enable_operation(processor, op_desc, nvdla_minor);
 
 exit:
 	dla_debug("Exit: %s\n", __func__);
@@ -433,11 +437,12 @@ exit:
  */
 static int32_t
 dla_dequeue_operation(struct dla_engine *engine,
-			struct dla_processor *processor)
+		      struct dla_processor *processor)
 {
 	int32_t ret = 0;
 	int16_t index;
 	struct dla_common_op_desc *consumer;
+	int32_t nvdla_minor = engine->nvdla_minor;
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -474,16 +479,16 @@ dla_dequeue_operation(struct dla_engine *engine,
 	/**
 	 * Get operation descriptor
 	 */
-	consumer = dla_get_op_desc(engine->task, index,
-				processor->op_type, processor->roi_index);
+	consumer = dla_get_op_desc(engine->task, index, processor->op_type,
+				   processor->roi_index, nvdla_minor);
 	if (consumer == NULL) {
 		ret = ERR(NO_MEM);
 		dla_error("Failed to allocate op_desc");
 		goto exit;
 	}
 
-	ret = dla_submit_operation(processor, consumer, processor->roi_index);
-	dla_put_op_desc(consumer);
+	ret = dla_submit_operation(processor, consumer, processor->roi_index, nvdla_minor);
+	dla_put_op_desc(consumer, nvdla_minor);
 
 exit:
 	dla_debug("Exit: %s\n", __func__);
@@ -492,12 +497,13 @@ exit:
 
 static int
 dla_update_dependency(struct dla_consumer *consumer,
-			struct dla_common_op_desc *op_desc,
-			uint8_t event, uint8_t roi_index)
+		      struct dla_common_op_desc *op_desc,
+		      uint8_t event, uint8_t roi_index,
+		      int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	struct dla_processor *processor;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	if (consumer->index == -1)
 		goto exit;
@@ -529,7 +535,7 @@ dla_update_dependency(struct dla_consumer *consumer,
 		dla_debug("enable %s in %s as depdency are resolved\n",
 			processor->name, __func__);
 
-		ret = dla_enable_operation(processor, op_desc);
+		ret = dla_enable_operation(processor, op_desc, nvdla_minor);
 		if (ret)
 			goto exit;
 	}
@@ -540,11 +546,12 @@ exit:
 static int
 dla_update_consumers(struct dla_processor_group *group,
 		     struct dla_common_op_desc *op,
-		     uint8_t event)
+		     uint8_t event,
+		     int32_t nvdla_minor)
 {
 	int32_t i;
 	int32_t ret = 0;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	if (engine->status) {
 		dla_debug("Skip update as engine has reported error\n");
@@ -553,8 +560,9 @@ dla_update_consumers(struct dla_processor_group *group,
 
 	for (i = 0; i < DLA_OP_NUM; i++) {
 		ret = dla_update_dependency(&op->consumers[i],
-						group->consumers[i],
-						event, group->roi_index);
+					    group->consumers[i],
+					    event, group->roi_index,
+					    nvdla_minor);
 		if (ret) {
 			dla_error("Failed to update dependency for "
 				"consumer %d, ROI %d", i, group->roi_index);
@@ -563,8 +571,9 @@ dla_update_consumers(struct dla_processor_group *group,
 	}
 
 	ret = dla_update_dependency(&op->fused_parent,
-					group->fused_parent,
-					event, group->roi_index);
+				    group->fused_parent,
+				    event, group->roi_index,
+				    nvdla_minor);
 	if (ret) {
 		dla_error("Failed to update dependency for "
 			"fused parent, ROI %d", group->roi_index);
@@ -580,7 +589,8 @@ exit:
  */
 int
 dla_op_completion(struct dla_processor *processor,
-		  struct dla_processor_group *group)
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor)
 {
 	int32_t ret;
 #if STAT_ENABLE
@@ -590,7 +600,7 @@ dla_op_completion(struct dla_processor *processor,
 	struct dla_task *task;
 	struct dla_common_op_desc *op_desc;
 	struct dla_processor_group *next_group;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter:%s processor %s group%u\n", __func__,
 					processor->name, group->id);
@@ -613,7 +623,7 @@ dla_op_completion(struct dla_processor *processor,
 
 #if STAT_ENABLE
 	if (engine->stat_enable == (uint32_t)1) {
-		processor->get_stat_data(processor, group);
+		processor->get_stat_data(processor, group, nvdla_minor);
 
 		processor->dump_stat(processor);
 
@@ -643,7 +653,7 @@ dla_op_completion(struct dla_processor *processor,
 	 * Get an extra reference count to keep op descriptor
 	 * in cache until this operation completes
 	 */
-	dla_get_refcount(op_desc);
+	dla_get_refcount(op_desc, nvdla_minor);
 
 	LOG_EVENT(group->roi_index, group->id, processor->op_type,
 						LOG_OPERATION_END);
@@ -667,7 +677,7 @@ dla_op_completion(struct dla_processor *processor,
 	 * update dependency graph for this task
 	 * TODO: Add proper error handling
 	 */
-	ret = dla_update_consumers(group, op_desc, DLA_EVENT_OP_COMPLETED);
+	ret = dla_update_consumers(group, op_desc, DLA_EVENT_OP_COMPLETED, nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -676,11 +686,11 @@ dla_op_completion(struct dla_processor *processor,
 				engine->network->num_operations);
 
 	/* free operation descriptor from cache */
-	dla_reset_group(group);
+	dla_reset_group(group, nvdla_minor);
 
 	/* if not hwl pending, means network completed */
 	if (engine->network->num_operations == engine->num_proc_hwl) {
-		dla_put_op_desc(op_desc);
+	    dla_put_op_desc(op_desc, nvdla_minor);
 		goto exit;
 	}
 
@@ -693,7 +703,7 @@ dla_op_completion(struct dla_processor *processor,
 		if (!processor->is_ready(processor, next_group))
 			goto dequeue_op;
 
-		ret = dla_program_operation(processor, next_group);
+		ret = dla_program_operation(processor, next_group, nvdla_minor);
 		if (ret)
 			goto exit;
 
@@ -701,7 +711,8 @@ dla_op_completion(struct dla_processor *processor,
 			goto dequeue_op;
 
 		ret = dla_enable_operation(processor,
-					   next_group->op_desc);
+					   next_group->op_desc,
+					   nvdla_minor);
 		if (ret)
 			goto exit;
 	}
@@ -711,7 +722,7 @@ dequeue_op:
 	ret = dla_dequeue_operation(engine, processor);
 
 exit:
-	dla_put_op_desc(op_desc);
+	dla_put_op_desc(op_desc, nvdla_minor);
 	dla_debug("Exit:%s processor %s group%u status=%d\n",
 				__func__, processor->name,
 				group->id, ret);
@@ -734,6 +745,7 @@ dla_read_network_config(struct dla_engine *engine)
 	int32_t ret;
 	uint64_t network_addr;
 	struct dla_task *task = engine->task;
+	int32_t nvdla_minor = engine->nvdla_minor;
 
 	dla_debug("Enter:%s\n", __func__);
 
@@ -763,7 +775,7 @@ dla_read_network_config(struct dla_engine *engine)
 	 * such as all address indexes.
 	 */
 	ret = dla_data_read(engine->driver_context, task->task_data,
-				network_addr, (void *)&network,
+				network_addr, (void *)&network[nvdla_minor],
 				sizeof(struct dla_network_desc),
 				0);
 	if (ret) {
@@ -771,16 +783,16 @@ dla_read_network_config(struct dla_engine *engine)
 		goto exit;
 	}
 
-	dla_debug_network_desc(&network);
+	dla_debug_network_desc(&network[nvdla_minor]);
 
-	if (network.num_operations == 0)
+	if (network[nvdla_minor].num_operations == 0)
 		goto exit;
 
 	/**
 	 * Read operation descriptor list address from address list
 	 */
 	ret = dla_get_dma_address(engine->driver_context, task->task_data,
-				network.operation_desc_index,
+				network[nvdla_minor].operation_desc_index,
 				(void *)&task->operation_desc_addr,
 				DESTINATION_PROCESSOR);
 	if (ret) {
@@ -792,7 +804,7 @@ dla_read_network_config(struct dla_engine *engine)
 	 * Read surface descriptor list address from address list
 	 */
 	ret = dla_get_dma_address(engine->driver_context, task->task_data,
-				network.surface_desc_index,
+				network[nvdla_minor].surface_desc_index,
 				(void *)&task->surface_desc_addr,
 				DESTINATION_PROCESSOR);
 	if (ret) {
@@ -804,7 +816,7 @@ dla_read_network_config(struct dla_engine *engine)
 	 * Read dependency graph address from address list
 	 */
 	ret = dla_get_dma_address(engine->driver_context, task->task_data,
-				network.dependency_graph_index,
+				network[nvdla_minor].dependency_graph_index,
 				(void *)&task->dependency_graph_addr,
 				DESTINATION_PROCESSOR);
 	if (ret) {
@@ -815,10 +827,10 @@ dla_read_network_config(struct dla_engine *engine)
 	/**
 	 * Read LUT data list address from address list
 	 */
-	if (network.num_luts) {
+	if (network[nvdla_minor].num_luts) {
 		ret = dla_get_dma_address(engine->driver_context,
 					task->task_data,
-					network.lut_data_index,
+					network[nvdla_minor].lut_data_index,
 					(void *)&task->lut_data_addr,
 					DESTINATION_PROCESSOR);
 		if (ret) {
@@ -830,13 +842,13 @@ dla_read_network_config(struct dla_engine *engine)
 	/**
 	 * Read address for ROI information
 	 */
-	if (network.dynamic_roi) {
+	if (network[nvdla_minor].dynamic_roi) {
 		/**
 		 * Read ROI array address from address list
 		 */
 		ret = dla_get_dma_address(engine->driver_context,
 					task->task_data,
-					network.roi_array_index,
+					network[nvdla_minor].roi_array_index,
 					(void *)&task->roi_array_addr,
 					DESTINATION_PROCESSOR);
 		if (ret) {
@@ -846,7 +858,7 @@ dla_read_network_config(struct dla_engine *engine)
 
 		ret = dla_data_read(engine->driver_context, task->task_data,
 					task->roi_array_addr,
-					(void *)&roi_array_length,
+					(void *)&roi_array_length[nvdla_minor],
 					sizeof(uint64_t),
 					0);
 		if (ret) {
@@ -858,20 +870,20 @@ dla_read_network_config(struct dla_engine *engine)
 		 * Number of ROIs detected can't be greater than maximum number
 		 * ROIs this network can process
 		 */
-		if (roi_array_length > network.num_rois) {
+		if (roi_array_length[nvdla_minor] > network[nvdla_minor].num_rois) {
 			dla_error("Invalid number of ROIs detected");
 			ret = ERR(INVALID_INPUT);
 			goto exit;
 		}
 
-		network.num_rois = roi_array_length;
+		network[nvdla_minor].num_rois = roi_array_length[nvdla_minor];
 
 		/**
 		 * Read surface address from address list
 		 */
 		ret = dla_get_dma_address(engine->driver_context,
 						task->task_data,
-						network.surface_index,
+						network[nvdla_minor].surface_index,
 						(void *)&task->surface_addr,
 						DESTINATION_DMA);
 		if (ret) {
@@ -881,10 +893,10 @@ dla_read_network_config(struct dla_engine *engine)
 	}
 
 #if STAT_ENABLE
-	if (network.stat_list_index != -1) {
+	if (network[nvdla_minor].stat_list_index != -1) {
 		ret = dla_get_dma_address(engine->driver_context,
 						task->task_data,
-						network.stat_list_index,
+						network[nvdla_minor].stat_list_index,
 						(void *)&task->stat_data_addr,
 						DESTINATION_PROCESSOR);
 		if (ret) {
@@ -908,6 +920,7 @@ dla_initiate_processors(struct dla_engine *engine)
 	struct dla_processor *processor;
 	struct dla_common_op_desc *consumer;
 	struct dla_network_desc *nw;
+	int32_t nvdla_minor = engine->nvdla_minor;
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -935,7 +948,7 @@ dla_initiate_processors(struct dla_engine *engine)
 		if (-1 == index)
 			continue;
 
-		consumer = dla_get_op_desc(engine->task, index, i, 0);
+		consumer = dla_get_op_desc(engine->task, index, i, 0, nvdla_minor);
 		/*
 		 * if consumer is NULL, it means either data copy error
 		 * or cache insufficient - we should fix it
@@ -949,8 +962,8 @@ dla_initiate_processors(struct dla_engine *engine)
 
 		processor = &engine->processors[consumer->op_type];
 
-		ret = dla_submit_operation(processor, consumer, 0);
-		dla_put_op_desc(consumer);
+		ret = dla_submit_operation(processor, consumer, 0, nvdla_minor);
+		dla_put_op_desc(consumer, nvdla_minor);
 		if (ret && ret != ERR(PROCESSOR_BUSY)) {
 			dla_error("Failed to submit %s op from index %u\n",
 						processor->name, index);
@@ -970,7 +983,7 @@ exit:
 }
 
 static int
-dla_handle_events(struct dla_processor *processor)
+dla_handle_events(struct dla_processor *processor, int32_t nvdla_minor)
 {
 	int32_t j;
 	int32_t ret = 0;
@@ -990,7 +1003,8 @@ dla_handle_events(struct dla_processor *processor)
 
 			ret = dla_update_consumers(group,
 						   group->op_desc,
-						   DLA_EVENT_CDMA_WT_DONE);
+						   DLA_EVENT_CDMA_WT_DONE,
+						   nvdla_minor);
 			if (ret)
 				goto exit;
 		}
@@ -1001,7 +1015,8 @@ dla_handle_events(struct dla_processor *processor)
 
 			ret = dla_update_consumers(group,
 						   group->op_desc,
-						   DLA_EVENT_CDMA_DT_DONE);
+						   DLA_EVENT_CDMA_DT_DONE,
+						   nvdla_minor);
 			if (ret)
 				goto exit;
 		}
@@ -1013,7 +1028,7 @@ dla_handle_events(struct dla_processor *processor)
 			dla_info("Handle op complete event, processor %s "
 				"group %u\n", processor->name, group->id);
 
-			ret = dla_op_completion(processor, group);
+			ret = dla_op_completion(processor, group, nvdla_minor);
 			if (ret)
 				goto exit;
 		}
@@ -1035,12 +1050,13 @@ dla_process_events(void *engine_context, uint32_t *task_complete)
 	int32_t i;
 	int32_t ret = 0;
 	struct dla_engine *engine = (struct dla_engine *)engine_context;
+	int32_t nvdla_minor = engine->nvdla_minor;
 
 	for (i = 0; i < DLA_OP_NUM; i++) {
 		struct dla_processor *processor;
 
 		processor = &engine->processors[i];
-		ret = dla_handle_events(processor);
+		ret = dla_handle_events(processor, nvdla_minor);
 		/**
 		 * Incase engine status is non-zero, then don't
 		 * update the engine status. We should keep its
@@ -1068,7 +1084,8 @@ dla_execute_task(void *engine_context, void *task_data, void *config_data)
 {
 	int32_t ret;
 	struct dla_engine *engine = (struct dla_engine *)engine_context;
-
+	int32_t nvdla_minor = engine->nvdla_minor;
+	
 	if (engine == NULL) {
 		dla_error("engine is NULL\n");
 		ret = ERR(INVALID_INPUT);
@@ -1090,7 +1107,7 @@ dla_execute_task(void *engine_context, void *task_data, void *config_data)
 
 	engine->task->task_data = task_data;
 	engine->config_data = config_data;
-	engine->network = &network;
+	engine->network = &network[nvdla_minor];
 	engine->num_proc_hwl = 0;
 	engine->stat_enable = 0;
 
@@ -1109,7 +1126,7 @@ dla_execute_task(void *engine_context, void *task_data, void *config_data)
 		goto complete;
 
 #if STAT_ENABLE
-	if (network.stat_list_index != -1)
+	if (network[nvdla_minor].stat_list_index != -1)
 		engine->stat_enable = 1;
 #endif /* STAT_ENABLE */
 

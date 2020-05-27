@@ -61,22 +61,22 @@ static const uint32_t map_ptr_addr[] = {
 	RBK_REG(S_POINTER),
 };
 
-int32_t dla_enable_intr(uint32_t mask)
+int32_t dla_enable_intr(uint32_t mask, int32_t nvdla_minor)
 {
-	uint32_t reg = glb_reg_read(S_INTR_MASK);
+	uint32_t reg = glb_reg_read(S_INTR_MASK, nvdla_minor);
 
 	reg = reg & (~mask);
-	glb_reg_write(S_INTR_MASK, reg);
+	glb_reg_write(S_INTR_MASK, reg, nvdla_minor);
 
 	RETURN(0);
 }
 
-int32_t dla_disable_intr(uint32_t mask)
+int32_t dla_disable_intr(uint32_t mask,  int32_t nvdla_minor)
 {
-	uint32_t reg = glb_reg_read(S_INTR_MASK);
+	uint32_t reg = glb_reg_read(S_INTR_MASK, nvdla_minor);
 
 	reg = reg | mask;
-	glb_reg_write(S_INTR_MASK, reg);
+	glb_reg_write(S_INTR_MASK, reg, nvdla_minor);
 
 	RETURN(0);
 }
@@ -125,11 +125,12 @@ dla_read_input_address(struct dla_data_cube *data,
 		       uint64_t *address,
 		       int16_t op_index,
 		       uint8_t roi_index,
-		       uint8_t bpp)
+		       uint8_t bpp,
+		       int32_t nvdla_minor)
 {
 	uint64_t roi_desc_addr;
 	int32_t ret = ERR(INVALID_INPUT);
-	struct dla_engine *en = dla_get_engine();
+	struct dla_engine *en = dla_get_engine(nvdla_minor);
 
 	/**
 	 * If memory type is HW then no address required
@@ -195,7 +196,8 @@ exit:
 int
 utils_get_free_group(struct dla_processor *processor,
 		     uint8_t *group_id,
-		     uint8_t *rdma_id)
+		     uint8_t *rdma_id,
+		     int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint32_t pointer;
@@ -205,13 +207,13 @@ utils_get_free_group(struct dla_processor *processor,
 	hw_rdma_ptr = 0;
 
 	if (processor->op_type == DLA_OP_BDMA) {
-		pointer = reg_read(map_ptr_addr[processor->op_type]);
+		pointer = reg_read(map_ptr_addr[processor->op_type], nvdla_minor);
 		hw_consumer_ptr = ((pointer & MASK(BDMA_STATUS_0, GRP0_BUSY)) >>
 				SHIFT(BDMA_STATUS_0, GRP0_BUSY)) ==
 				FIELD_ENUM(BDMA_STATUS_0, GRP0_BUSY, YES) ?
 				1 : 0;
 	} else {
-		pointer = reg_read(map_ptr_addr[processor->op_type]);
+		pointer = reg_read(map_ptr_addr[processor->op_type], nvdla_minor);
 		hw_consumer_ptr = (pointer & MASK(CDP_S_POINTER_0, CONSUMER)) >>
 				SHIFT(CDP_S_POINTER_0, CONSUMER);
 
@@ -220,8 +222,8 @@ utils_get_free_group(struct dla_processor *processor,
 		 * has RDMA module
 		 */
 		if (map_rdma_ptr_addr[processor->op_type] != 0xFFFFFFFF) {
-			pointer =
-			reg_read(map_rdma_ptr_addr[processor->op_type]);
+			pointer = reg_read(map_rdma_ptr_addr[processor->op_type],
+					   nvdla_minor);
 			hw_rdma_ptr = (pointer &
 					MASK(CDP_S_POINTER_0, CONSUMER)) >>
 					SHIFT(CDP_S_POINTER_0, CONSUMER);

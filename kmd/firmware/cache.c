@@ -35,11 +35,11 @@
 
 #define DLA_OP_CACHE_SIZE (DLA_NUM_GROUPS * ((DLA_OP_NUM + 2) * 2))
 
-static struct dla_common_op_desc desc_cache[DLA_OP_NUM][DLA_OP_CACHE_SIZE];
-static int32_t desc_refcount[DLA_OP_NUM][DLA_OP_CACHE_SIZE];
+static struct dla_common_op_desc desc_cache[MAX_N_NVDLA][DLA_OP_NUM][DLA_OP_CACHE_SIZE];
+static int32_t desc_refcount[MAX_N_NVDLA][DLA_OP_NUM][DLA_OP_CACHE_SIZE];
 
 void
-dla_get_refcount(struct dla_common_op_desc *op_desc)
+dla_get_refcount(struct dla_common_op_desc *op_desc, int32_t nvdla_minor)
 {
 	int32_t i;
 	struct dla_common_op_desc *desc = NULL;
@@ -50,12 +50,12 @@ dla_get_refcount(struct dla_common_op_desc *op_desc)
 	if (op_desc->index == -1)
 		return;
 
-	desc = &desc_cache[op_desc->op_type][0];
+	desc = &desc_cache[nvdla_minor][op_desc->op_type][0];
 
 	for (i = 0; i < DLA_OP_CACHE_SIZE; i++, desc++) {
 		if (desc->index == op_desc->index &&
 				desc->roi_index == op_desc->roi_index) {
-			desc_refcount[op_desc->op_type][i]++;
+			desc_refcount[nvdla_minor][op_desc->op_type][i]++;
 			return;
 		}
 	}
@@ -63,14 +63,15 @@ dla_get_refcount(struct dla_common_op_desc *op_desc)
 
 struct dla_common_op_desc *
 dla_get_op_desc(struct dla_task *task, int16_t index,
-			uint8_t op_type, uint8_t roi_index)
+		uint8_t op_type, uint8_t roi_index,
+		int32_t nvdla_minor)
 {
 	int32_t i;
 	int32_t ret;
 	uint64_t op_base;
 	uint64_t dep_graph_addr;
 	struct dla_common_op_desc *desc = NULL;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	if (index == -1) {
 		dla_debug("no desc get due to index==-1\n");
@@ -80,7 +81,7 @@ dla_get_op_desc(struct dla_task *task, int16_t index,
 	dep_graph_addr = (sizeof(struct dla_common_op_desc) *
 				engine->network->num_operations * roi_index);
 
-	desc = &desc_cache[op_type][0];
+	desc = &desc_cache[nvdla_minor][op_type][0];
 
 	for (i = 0; i < DLA_OP_CACHE_SIZE; i++, desc++) {
 		if (desc->index == index && desc->roi_index == roi_index) {
@@ -90,12 +91,12 @@ dla_get_op_desc(struct dla_task *task, int16_t index,
 						desc->op_type);
 				continue;
 			}
-			desc_refcount[op_type][i]++;
+			desc_refcount[nvdla_minor][op_type][i]++;
 			goto exit;
 		}
 	}
 
-	desc = &desc_cache[op_type][0];
+	desc = &desc_cache[nvdla_minor][op_type][0];
 
 	for (i = 0; i < DLA_OP_CACHE_SIZE; i++, desc++) {
 		if (desc->index == -1) {
@@ -138,9 +139,9 @@ dla_get_op_desc(struct dla_task *task, int16_t index,
 			 * Refcount must be 0 if we are reading it first time
 			 * from DRAM
 			 */
-			assert(desc_refcount[op_type][i] == 0);
+			assert(desc_refcount[nvdla_minor][op_type][i] == 0);
 
-			desc_refcount[op_type][i]++;
+			desc_refcount[nvdla_minor][op_type][i]++;
 			goto exit;
 		}
 	}
@@ -150,12 +151,12 @@ exit:
 }
 
 static void
-dla_free_op_desc(struct dla_common_op_desc *op_desc)
+dla_free_op_desc(struct dla_common_op_desc *op_desc, int32_t nvdla_minor)
 {
 	uint64_t op_base;
 	uint64_t dep_graph_addr;
 	struct dla_task *task;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s op desc index %u ROI %d\n", __func__,
 				op_desc->index, op_desc->roi_index);
@@ -199,7 +200,7 @@ exit:
 }
 
 void
-dla_put_op_desc(struct dla_common_op_desc *op_desc)
+dla_put_op_desc(struct dla_common_op_desc *op_desc, int32_t nvdla_minor)
 {
 	int32_t i;
 	struct dla_common_op_desc *desc;
@@ -210,7 +211,7 @@ dla_put_op_desc(struct dla_common_op_desc *op_desc)
 	if (op_desc->index == -1)
 		return;
 
-	desc = &desc_cache[op_desc->op_type][0];
+	desc = &desc_cache[nvdla_minor][op_desc->op_type][0];
 
 	for (i = 0; i < DLA_OP_CACHE_SIZE; i++, desc++) {
 		if (desc->index == op_desc->index &&
@@ -218,15 +219,15 @@ dla_put_op_desc(struct dla_common_op_desc *op_desc)
 			/**
 			 * Refcount can't be 0 when we are trying to free it
 			 */
-			assert(desc_refcount[op_desc->op_type][i] > 0);
+			assert(desc_refcount[nvdla_minor][op_desc->op_type][i] > 0);
 
-			desc_refcount[op_desc->op_type][i]--;
+			desc_refcount[nvdla_minor][op_desc->op_type][i]--;
 
 			/**
 			 * Free desc if refcount is 0
 			 */
-			if (desc_refcount[op_desc->op_type][i] == 0)
-				dla_free_op_desc(op_desc);
+			if (desc_refcount[nvdla_minor][op_desc->op_type][i] == 0)
+			    dla_free_op_desc(op_desc, nvdla_minor);
 
 			return;
 		}
@@ -236,18 +237,20 @@ dla_put_op_desc(struct dla_common_op_desc *op_desc)
 void
 dla_init_op_cache(struct dla_engine *engine)
 {
-	int32_t i, j;
-	struct dla_common_op_desc *desc = &desc_cache[0][0];
+	int32_t i, j, n;
+	struct dla_common_op_desc *desc = &desc_cache[0][0][0];
 
-	dla_memset((uint8_t *)&desc_cache[0][0], 0, sizeof(desc_cache));
-	dla_memset((uint8_t *)&desc_refcount[0][0], 0, sizeof(desc_refcount));
+	dla_memset((uint8_t *)&desc_cache[0][0][0], 0, sizeof(desc_cache));
+	dla_memset((uint8_t *)&desc_refcount[0][0][0], 0, sizeof(desc_refcount));
 
-	for (i = 0; i < DLA_OP_NUM; i++) {
-		for (j = 0; j < DLA_OP_CACHE_SIZE; j++) {
-			desc->index = -1;
-			desc->roi_index = -1;
-			desc->op_type = (uint8_t)i;
-			desc++;
+	for (n = 0; n < MAX_N_NVDLA; n++) {
+		for (i = 0; i < DLA_OP_NUM; i++) {
+			for (j = 0; j < DLA_OP_CACHE_SIZE; j++) {
+				desc->index = -1;
+				desc->roi_index = -1;
+				desc->op_type = (uint8_t)i;
+				desc++;
+			}
 		}
 	}
 }

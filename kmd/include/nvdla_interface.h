@@ -48,7 +48,7 @@
  *
  * @return			0 on success and negative on error
  */
-int32_t dla_register_driver(void **engine_context, void *driver_context);
+int32_t dla_register_driver(void **engine_context, void *driver_context, int32_t nvdla_minor);
 
 /**
  * @brief			Interrupt handler

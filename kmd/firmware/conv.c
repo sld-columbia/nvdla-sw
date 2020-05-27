@@ -147,7 +147,8 @@ static const uint8_t map_mean[] = {
 #if STAT_ENABLE
 void
 dla_conv_stat_data(struct dla_processor *processor,
-					struct dla_processor_group *group)
+		   struct dla_processor_group *group,
+		   int32_t nvdla_minor)
 {
 	uint64_t end_time = 0;
 	struct dla_conv_stat_desc *conv_stat;
@@ -156,15 +157,15 @@ dla_conv_stat_data(struct dla_processor *processor,
 
 	end_time = dla_get_time_us();
 
-	conv_stat->data_read_stall = cdma_reg_read(D_PERF_DAT_READ_STALL);
-	conv_stat->weight_read_stall = cdma_reg_read(D_PERF_WT_READ_STALL);
-	conv_stat->data_read_latency = cdma_reg_read(D_PERF_DAT_READ_LATENCY);
-	conv_stat->weight_read_latency = cdma_reg_read(D_PERF_WT_READ_LATENCY);
-	conv_stat->nan_data_num = cdma_reg_read(D_NAN_INPUT_DATA_NUM);
-	conv_stat->nan_weight_num = cdma_reg_read(D_NAN_INPUT_WEIGHT_NUM);
-	conv_stat->inf_data_num = cdma_reg_read(D_INF_INPUT_DATA_NUM);
-	conv_stat->inf_weight_num = cdma_reg_read(D_INF_INPUT_WEIGHT_NUM);
-	conv_stat->saturation_count = cacc_reg_read(D_OUT_SATURATION);
+	conv_stat->data_read_stall = cdma_reg_read(D_PERF_DAT_READ_STALL, nvdla_minor);
+	conv_stat->weight_read_stall = cdma_reg_read(D_PERF_WT_READ_STALL, nvdla_minor);
+	conv_stat->data_read_latency = cdma_reg_read(D_PERF_DAT_READ_LATENCY, nvdla_minor);
+	conv_stat->weight_read_latency = cdma_reg_read(D_PERF_WT_READ_LATENCY, nvdla_minor);
+	conv_stat->nan_data_num = cdma_reg_read(D_NAN_INPUT_DATA_NUM, nvdla_minor);
+	conv_stat->nan_weight_num = cdma_reg_read(D_NAN_INPUT_WEIGHT_NUM, nvdla_minor);
+	conv_stat->inf_data_num = cdma_reg_read(D_INF_INPUT_DATA_NUM, nvdla_minor);
+	conv_stat->inf_weight_num = cdma_reg_read(D_INF_INPUT_WEIGHT_NUM, nvdla_minor);
+	conv_stat->saturation_count = cacc_reg_read(D_OUT_SATURATION, nvdla_minor);
 	conv_stat->runtime = (uint32_t)(end_time - group->start_time);
 }
 
@@ -198,43 +199,43 @@ get_in_format(uint8_t format)
 }
 
 void
-dla_conv_set_producer(int32_t group_id, int32_t rdma_group_id)
+dla_conv_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor)
 {
 	uint32_t reg;
 
 	/* set producer pointer for all sub-modules */
 	reg = group_id << SHIFT(CACC_S_POINTER_0, PRODUCER);
-	cacc_reg_write(S_POINTER, reg);
-	cmac_a_reg_write(S_POINTER, reg);
-	cmac_b_reg_write(S_POINTER, reg);
-	csc_reg_write(S_POINTER, reg);
-	cdma_reg_write(S_POINTER, reg);
+	cacc_reg_write(S_POINTER, reg, nvdla_minor);
+	cmac_a_reg_write(S_POINTER, reg, nvdla_minor);
+	cmac_b_reg_write(S_POINTER, reg, nvdla_minor);
+	csc_reg_write(S_POINTER, reg, nvdla_minor);
+	cdma_reg_write(S_POINTER, reg, nvdla_minor);
 }
 
 int
-dla_conv_enable(struct dla_processor_group *group)
+dla_conv_enable(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	uint32_t reg;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_trace("Enter: %s", __func__);
 
 	do {
-		reg = cdma_reg_read(S_CBUF_FLUSH_STATUS);
+		reg = cdma_reg_read(S_CBUF_FLUSH_STATUS, nvdla_minor);
 	} while (!(reg & MASK(CDMA_S_CBUF_FLUSH_STATUS_0, FLUSH_DONE)));
 
 	if (engine->stat_enable == (uint32_t)1) {
-		cdma_reg_write(D_PERF_ENABLE, 1);
+		cdma_reg_write(D_PERF_ENABLE, 1, nvdla_minor);
 		group->start_time = dla_get_time_us();
 	}
 
 	/* enable all sub-modules */
 	reg = FIELD_ENUM(CACC_D_OP_ENABLE_0, OP_EN, ENABLE);
-	cacc_reg_write(D_OP_ENABLE, reg);
-	cmac_a_reg_write(D_OP_ENABLE, reg);
-	cmac_b_reg_write(D_OP_ENABLE, reg);
-	csc_reg_write(D_OP_ENABLE, reg);
-	cdma_reg_write(D_OP_ENABLE, reg);
+	cacc_reg_write(D_OP_ENABLE, reg, nvdla_minor);
+	cmac_a_reg_write(D_OP_ENABLE, reg, nvdla_minor);
+	cmac_b_reg_write(D_OP_ENABLE, reg, nvdla_minor);
+	csc_reg_write(D_OP_ENABLE, reg, nvdla_minor);
+	cdma_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 
 	dla_trace("Exit: %s", __func__);
 
@@ -248,7 +249,7 @@ dla_conv_rdma_check(struct dla_processor_group *group)
 }
 
 static int32_t
-processor_conv_program(struct dla_processor_group *group)
+processor_conv_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint32_t reg, high, low, shift, mask;
@@ -260,7 +261,7 @@ processor_conv_program(struct dla_processor_group *group)
 	uint64_t output_address = 0;
 	uint32_t atom_size = 0;
 	bool weight_compress_support = false;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 	struct dla_conv_op_desc *conv_op;
 	struct dla_conv_surface_desc *conv_surface;
 
@@ -321,9 +322,10 @@ processor_conv_program(struct dla_processor_group *group)
 	}
 
 	ret = dla_read_input_address(&conv_surface->src_data, &input_address,
-					group->op_desc->index,
-					group->roi_index,
-					map_img_fmt[conv_op->data_format][1]);
+				     group->op_desc->index,
+				     group->roi_index,
+				     map_img_fmt[conv_op->data_format][1],
+				     nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -335,7 +337,7 @@ processor_conv_program(struct dla_processor_group *group)
 		ret, ERR(INVALID_INPUT), exit);
 
 	/* check if the register group is idle */
-	reg = cacc_reg_read(S_STATUS);
+	reg = cacc_reg_read(S_STATUS, nvdla_minor);
 	mask = group->id ? MASK(CACC_S_STATUS_0, STATUS_1) :
 		MASK(CACC_S_STATUS_0, STATUS_0);
 	shift = group->id ? SHIFT(CACC_S_STATUS_0, STATUS_1) :
@@ -344,7 +346,7 @@ processor_conv_program(struct dla_processor_group *group)
 	ASSERT_GOTO((reg == FIELD_ENUM(CACC_S_STATUS_0, STATUS_0, IDLE)),
 		ret, ERR(INVALID_INPUT), exit);
 
-	reg = cmac_a_reg_read(S_STATUS);
+	reg = cmac_a_reg_read(S_STATUS, nvdla_minor);
 	mask = group->id ? MASK(CMAC_A_S_STATUS_0, STATUS_1) :
         MASK(CMAC_A_S_STATUS_0, STATUS_0);
 	shift = group->id ? SHIFT(CMAC_A_S_STATUS_0, STATUS_1) :
@@ -353,7 +355,7 @@ processor_conv_program(struct dla_processor_group *group)
 	ASSERT_GOTO((reg == FIELD_ENUM(CMAC_A_S_STATUS_0, STATUS_0, IDLE)),
 		ret, ERR(INVALID_INPUT), exit);
 
-	reg = cmac_b_reg_read(S_STATUS);
+	reg = cmac_b_reg_read(S_STATUS, nvdla_minor);
 	mask = group->id ? MASK(CMAC_B_S_STATUS_0, STATUS_1) :
 		MASK(CMAC_B_S_STATUS_0, STATUS_0);
 	shift = group->id ? SHIFT(CMAC_B_S_STATUS_0, STATUS_1) :
@@ -362,7 +364,7 @@ processor_conv_program(struct dla_processor_group *group)
 	ASSERT_GOTO((reg == FIELD_ENUM(CMAC_B_S_STATUS_0, STATUS_0, IDLE)),
 		ret, ERR(INVALID_INPUT), exit);
 
-	reg = csc_reg_read(S_STATUS);
+	reg = csc_reg_read(S_STATUS, nvdla_minor);
 	mask = group->id ? MASK(CSC_S_STATUS_0, STATUS_1) :
 		MASK(CSC_S_STATUS_0, STATUS_0);
 	shift = group->id ? SHIFT(CSC_S_STATUS_0, STATUS_1) :
@@ -371,7 +373,7 @@ processor_conv_program(struct dla_processor_group *group)
 	ASSERT_GOTO((reg == FIELD_ENUM(CSC_S_STATUS_0, STATUS_0, IDLE)),
 		ret, ERR(INVALID_INPUT), exit);
 
-	reg = cdma_reg_read(S_STATUS);
+	reg = cdma_reg_read(S_STATUS, nvdla_minor);
 	mask = group->id ? MASK(CDMA_S_STATUS_0, STATUS_1) :
 		MASK(CDMA_S_STATUS_0, STATUS_0);
 	shift = group->id ? SHIFT(CDMA_S_STATUS_0, STATUS_1) :
@@ -387,23 +389,23 @@ processor_conv_program(struct dla_processor_group *group)
 		<< SHIFT(CACC_D_MISC_CFG_0, CONV_MODE)) |
 		(map_precision[conv_op->out_precision]
 		<< SHIFT(CACC_D_MISC_CFG_0, PROC_PRECISION));
-	cacc_reg_write(D_MISC_CFG, reg);
+	cacc_reg_write(D_MISC_CFG, reg, nvdla_minor);
 
 	reg = ((conv_surface->dst_data.width - 1)
 		<< SHIFT(CACC_D_DATAOUT_SIZE_0_0, DATAOUT_WIDTH)) |
 		((conv_surface->dst_data.height - 1)
 		<< SHIFT(CACC_D_DATAOUT_SIZE_0_0, DATAOUT_HEIGHT));
-	cacc_reg_write(D_DATAOUT_SIZE_0, reg);
+	cacc_reg_write(D_DATAOUT_SIZE_0, reg, nvdla_minor);
 
 	reg = ((conv_surface->dst_data.channel - 1)
 		<< SHIFT(CACC_D_DATAOUT_SIZE_1_0, DATAOUT_CHANNEL));
-	cacc_reg_write(D_DATAOUT_SIZE_1, reg);
+	cacc_reg_write(D_DATAOUT_SIZE_1, reg, nvdla_minor);
 
 	low = LOW32BITS(output_address);
-	cacc_reg_write(D_DATAOUT_ADDR, low);
-	cacc_reg_write(D_BATCH_NUMBER, conv_op->batch - 1);
-	cacc_reg_write(D_LINE_STRIDE, conv_surface->dst_data.line_stride);
-	cacc_reg_write(D_SURF_STRIDE, conv_surface->dst_data.surf_stride);
+	cacc_reg_write(D_DATAOUT_ADDR, low, nvdla_minor);
+	cacc_reg_write(D_BATCH_NUMBER, conv_op->batch - 1, nvdla_minor);
+	cacc_reg_write(D_LINE_STRIDE, conv_surface->dst_data.line_stride, nvdla_minor);
+	cacc_reg_write(D_SURF_STRIDE, conv_surface->dst_data.surf_stride, nvdla_minor);
 
 	if (conv_surface->dst_data.width == 1 &&
 				conv_surface->dst_data.height == 1) {
@@ -420,17 +422,17 @@ processor_conv_program(struct dla_processor_group *group)
 		reg |= (FIELD_ENUM(CACC_D_DATAOUT_MAP_0, SURF_PACKED, FALSE) <<
 				SHIFT(CACC_D_DATAOUT_MAP_0, SURF_PACKED));
 	}
-	cacc_reg_write(D_DATAOUT_MAP, reg);
+	cacc_reg_write(D_DATAOUT_MAP, reg, nvdla_minor);
 
-	cacc_reg_write(D_CLIP_CFG, conv_op->out_cvt.truncate);
+	cacc_reg_write(D_CLIP_CFG, conv_op->out_cvt.truncate, nvdla_minor);
 
 	/* CMAC */
 	reg = (map_conv[conv_op->conv_mode]
 		<< SHIFT(CMAC_A_D_MISC_CFG_0, CONV_MODE)) |
 		(map_precision[conv_op->out_precision]
 		<< SHIFT(CMAC_A_D_MISC_CFG_0, PROC_PRECISION));
-	cmac_a_reg_write(D_MISC_CFG, reg);
-	cmac_b_reg_write(D_MISC_CFG, reg);
+	cmac_a_reg_write(D_MISC_CFG, reg, nvdla_minor);
+	cmac_b_reg_write(D_MISC_CFG, reg, nvdla_minor);
 
 	/* CSC */
 	reg = (map_conv[conv_op->conv_mode]
@@ -447,69 +449,69 @@ processor_conv_program(struct dla_processor_group *group)
 		<< SHIFT(CSC_D_MISC_CFG_0, SKIP_DATA_RLS)) |
 		(conv_op->skip_weight_rls
 		<< SHIFT(CSC_D_MISC_CFG_0, SKIP_WEIGHT_RLS));
-	csc_reg_write(D_MISC_CFG, reg);
+	csc_reg_write(D_MISC_CFG, reg, nvdla_minor);
 
 	reg = (get_in_format(conv_op->data_format) <<
 		SHIFT(CSC_D_DATAIN_FORMAT_0, DATAIN_FORMAT));
-	csc_reg_write(D_DATAIN_FORMAT, reg);
+	csc_reg_write(D_DATAIN_FORMAT, reg, nvdla_minor);
 
 	reg = ((conv_op->input_width_csc - 1)
 		<< SHIFT(CSC_D_DATAIN_SIZE_EXT_0_0, DATAIN_WIDTH_EXT)) |
 		((conv_op->input_height_csc - 1)
 		<< SHIFT(CSC_D_DATAIN_SIZE_EXT_0_0, DATAIN_HEIGHT_EXT));
-	csc_reg_write(D_DATAIN_SIZE_EXT_0, reg);
+	csc_reg_write(D_DATAIN_SIZE_EXT_0, reg, nvdla_minor);
 
 	reg = ((conv_op->input_channel_csc - 1)
 		<< SHIFT(CSC_D_DATAIN_SIZE_EXT_1_0, DATAIN_CHANNEL_EXT));
-	csc_reg_write(D_DATAIN_SIZE_EXT_1, reg);
+	csc_reg_write(D_DATAIN_SIZE_EXT_1, reg, nvdla_minor);
 
 	reg = ((conv_op->batch - 1)
 		<< SHIFT(CSC_D_BATCH_NUMBER_0, BATCHES));
-	csc_reg_write(D_BATCH_NUMBER, reg);
+	csc_reg_write(D_BATCH_NUMBER, reg, nvdla_minor);
 	reg = ((conv_op->post_extension)
 		<< SHIFT(CSC_D_POST_Y_EXTENSION_0, Y_EXTENSION));
-	csc_reg_write(D_POST_Y_EXTENSION, reg);
+	csc_reg_write(D_POST_Y_EXTENSION, reg, nvdla_minor);
 
 	reg = ((conv_op->entry_per_slice - 1)
 		<< SHIFT(CSC_D_ENTRY_PER_SLICE_0, ENTRIES));
-	csc_reg_write(D_ENTRY_PER_SLICE, reg);
+	csc_reg_write(D_ENTRY_PER_SLICE, reg, nvdla_minor);
 
 	reg = (map_weight_fmt[conv_op->weight_format]
 		<< SHIFT(CSC_D_WEIGHT_FORMAT_0, WEIGHT_FORMAT));
-	csc_reg_write(D_WEIGHT_FORMAT, reg);
+	csc_reg_write(D_WEIGHT_FORMAT, reg, nvdla_minor);
 
 	reg = ((conv_op->kernel_width_csc - 1)
 		<< SHIFT(CSC_D_WEIGHT_SIZE_EXT_0_0, WEIGHT_WIDTH_EXT)) |
 		((conv_op->kernel_height_csc - 1)
 		<< SHIFT(CSC_D_WEIGHT_SIZE_EXT_0_0, WEIGHT_HEIGHT_EXT));
-	csc_reg_write(D_WEIGHT_SIZE_EXT_0, reg);
+	csc_reg_write(D_WEIGHT_SIZE_EXT_0, reg, nvdla_minor);
 
 	reg = ((conv_op->kernel_channel_csc - 1)
 		<< SHIFT(CSC_D_WEIGHT_SIZE_EXT_1_0, WEIGHT_CHANNEL_EXT)) |
 		((conv_surface->dst_data.channel - 1)
 		<< SHIFT(CSC_D_WEIGHT_SIZE_EXT_1_0, WEIGHT_KERNEL));
-	csc_reg_write(D_WEIGHT_SIZE_EXT_1, reg);
+	csc_reg_write(D_WEIGHT_SIZE_EXT_1, reg, nvdla_minor);
 
-	csc_reg_write(D_WEIGHT_BYTES, conv_surface->weight_data.size);
-	csc_reg_write(D_WMB_BYTES, conv_surface->wmb_data.size);
+	csc_reg_write(D_WEIGHT_BYTES, conv_surface->weight_data.size, nvdla_minor);
+	csc_reg_write(D_WMB_BYTES, conv_surface->wmb_data.size, nvdla_minor);
 
 	reg = ((conv_op->input_width_cmac - 1)
 		<< SHIFT(CSC_D_DATAOUT_SIZE_0_0, DATAOUT_WIDTH)) |
 		((conv_op->input_height_cmac - 1)
 		<< SHIFT(CSC_D_DATAOUT_SIZE_0_0, DATAOUT_HEIGHT));
-	csc_reg_write(D_DATAOUT_SIZE_0, reg);
+	csc_reg_write(D_DATAOUT_SIZE_0, reg, nvdla_minor);
 
 	reg = ((conv_surface->dst_data.channel - 1)
 		<< SHIFT(CSC_D_DATAOUT_SIZE_1_0, DATAOUT_CHANNEL));
-	csc_reg_write(D_DATAOUT_SIZE_1, reg);
+	csc_reg_write(D_DATAOUT_SIZE_1, reg, nvdla_minor);
 
 	reg = ((conv_surface->dst_data.width *
 				conv_surface->dst_data.height - 1)
 		<< SHIFT(CSC_D_ATOMICS_0, ATOMICS));
-	csc_reg_write(D_ATOMICS, reg);
+	csc_reg_write(D_ATOMICS, reg, nvdla_minor);
 	reg = ((conv_op->release - 1)
 		<< SHIFT(CSC_D_RELEASE_0, RLS_SLICES));
-	csc_reg_write(D_RELEASE, reg);
+	csc_reg_write(D_RELEASE, reg, nvdla_minor);
 
 	if (conv_op->conv_mode == CONV_MODE_DIRECT) {
 		stride_x = conv_op->conv_stride_x - 1;
@@ -527,31 +529,31 @@ processor_conv_program(struct dla_processor_group *group)
 		<< SHIFT(CSC_D_CONV_STRIDE_EXT_0, CONV_X_STRIDE_EXT)) |
 		(stride_y
 		<< SHIFT(CSC_D_CONV_STRIDE_EXT_0, CONV_Y_STRIDE_EXT));
-	csc_reg_write(D_CONV_STRIDE_EXT, reg);
+	csc_reg_write(D_CONV_STRIDE_EXT, reg, nvdla_minor);
 
 	reg = ((conv_op->dilation_x - 1)
 		<< SHIFT(CSC_D_DILATION_EXT_0, X_DILATION_EXT)) |
 		((conv_op->dilation_y - 1)
 		<< SHIFT(CSC_D_DILATION_EXT_0, Y_DILATION_EXT));
-	csc_reg_write(D_DILATION_EXT, reg);
+	csc_reg_write(D_DILATION_EXT, reg, nvdla_minor);
 
 	reg = (pad_x
 		<< SHIFT(CSC_D_ZERO_PADDING_0, PAD_LEFT)) |
 		(pad_y
 		<< SHIFT(CSC_D_ZERO_PADDING_0, PAD_TOP));
-	csc_reg_write(D_ZERO_PADDING, reg);
+	csc_reg_write(D_ZERO_PADDING, reg, nvdla_minor);
 
 	reg = (conv_op->pad_val
 		<< SHIFT(CSC_D_ZERO_PADDING_VALUE_0, PAD_VALUE)) &
 		MASK(CSC_D_ZERO_PADDING_VALUE_0, PAD_VALUE);
-	csc_reg_write(D_ZERO_PADDING_VALUE, reg);
+	csc_reg_write(D_ZERO_PADDING_VALUE, reg, nvdla_minor);
 
 	reg = ((conv_op->data_bank - 1)
 		<< SHIFT(CSC_D_BANK_0, DATA_BANK)) |
 		((conv_op->weight_bank - 1)
 		<< SHIFT(CSC_D_BANK_0, WEIGHT_BANK));
-	csc_reg_write(D_BANK, reg);
-	csc_reg_write(D_PRA_CFG, conv_op->pra_truncate);
+	csc_reg_write(D_BANK, reg, nvdla_minor);
+	csc_reg_write(D_PRA_CFG, conv_op->pra_truncate, nvdla_minor);
 
 	/* CBUF */
 	/* there's no CBUF register */
@@ -571,7 +573,7 @@ processor_conv_program(struct dla_processor_group *group)
 		<< SHIFT(CDMA_D_MISC_CFG_0, SKIP_DATA_RLS)) |
 		(conv_op->skip_weight_rls
 		<< SHIFT(CDMA_D_MISC_CFG_0, SKIP_WEIGHT_RLS));
-	cdma_reg_write(D_MISC_CFG, reg);
+	cdma_reg_write(D_MISC_CFG, reg, nvdla_minor);
 
 	reg = (get_in_format(conv_op->data_format) <<
 		SHIFT(CDMA_D_DATAIN_FORMAT_0, DATAIN_FORMAT)) |
@@ -581,41 +583,41 @@ processor_conv_program(struct dla_processor_group *group)
 		<< SHIFT(CDMA_D_DATAIN_FORMAT_0, PIXEL_MAPPING)) |
 		(conv_op->pixel_override
 		<< SHIFT(CDMA_D_DATAIN_FORMAT_0, PIXEL_SIGN_OVERRIDE));
-	cdma_reg_write(D_DATAIN_FORMAT, reg);
+	cdma_reg_write(D_DATAIN_FORMAT, reg, nvdla_minor);
 
 	reg = ((conv_surface->src_data.width - 1)
 		<< SHIFT(CDMA_D_DATAIN_SIZE_0_0, DATAIN_WIDTH)) |
 		((conv_surface->src_data.height - 1)
 		<< SHIFT(CDMA_D_DATAIN_SIZE_0_0, DATAIN_HEIGHT));
-	cdma_reg_write(D_DATAIN_SIZE_0, reg);
+	cdma_reg_write(D_DATAIN_SIZE_0, reg, nvdla_minor);
 
 	reg = ((conv_surface->src_data.channel - 1)
 		<< SHIFT(CDMA_D_DATAIN_SIZE_1_0, DATAIN_CHANNEL));
-	cdma_reg_write(D_DATAIN_SIZE_1, reg);
+	cdma_reg_write(D_DATAIN_SIZE_1, reg, nvdla_minor);
 
 	reg = ((conv_op->input_width_csc - 1)
 		<< SHIFT(CDMA_D_DATAIN_SIZE_EXT_0_0, DATAIN_WIDTH_EXT)) |
 		((conv_op->input_height_csc - 1)
 		<< SHIFT(CDMA_D_DATAIN_SIZE_EXT_0_0, DATAIN_HEIGHT_EXT));
-	cdma_reg_write(D_DATAIN_SIZE_EXT_0, reg);
+	cdma_reg_write(D_DATAIN_SIZE_EXT_0, reg, nvdla_minor);
 
 	reg = (map_ram[conv_surface->src_data.type]
 		<< SHIFT(CDMA_D_DAIN_RAM_TYPE_0, DATAIN_RAM_TYPE));
-	cdma_reg_write(D_DAIN_RAM_TYPE, reg);
+	cdma_reg_write(D_DAIN_RAM_TYPE, reg, nvdla_minor);
 
 	high = HIGH32BITS(input_address);
 	low = LOW32BITS(input_address);
-	cdma_reg_write(D_DAIN_ADDR_HIGH_0, high);
-	cdma_reg_write(D_DAIN_ADDR_LOW_0, low);
+	cdma_reg_write(D_DAIN_ADDR_HIGH_0, high, nvdla_minor);
+	cdma_reg_write(D_DAIN_ADDR_LOW_0, low, nvdla_minor);
 
 	high = HIGH32BITS((input_address + conv_surface->offset_u));
 	low = LOW32BITS(input_address + conv_surface->offset_u);
-	cdma_reg_write(D_DAIN_ADDR_HIGH_1, high);
-	cdma_reg_write(D_DAIN_ADDR_LOW_1, low);
+	cdma_reg_write(D_DAIN_ADDR_HIGH_1, high, nvdla_minor);
+	cdma_reg_write(D_DAIN_ADDR_LOW_1, low, nvdla_minor);
 
-	cdma_reg_write(D_LINE_STRIDE, conv_surface->src_data.line_stride);
-	cdma_reg_write(D_SURF_STRIDE, conv_surface->src_data.surf_stride);
-	cdma_reg_write(D_LINE_UV_STRIDE, conv_surface->in_line_uv_stride);
+	cdma_reg_write(D_LINE_STRIDE, conv_surface->src_data.line_stride, nvdla_minor);
+	cdma_reg_write(D_SURF_STRIDE, conv_surface->src_data.surf_stride, nvdla_minor);
+	cdma_reg_write(D_LINE_UV_STRIDE, conv_surface->in_line_uv_stride, nvdla_minor);
 
 	reg = ((conv_surface->src_data.line_stride ==
 			((uint32_t)conv_surface->src_data.width * atom_size))
@@ -624,60 +626,60 @@ processor_conv_program(struct dla_processor_group *group)
 			((uint32_t)(conv_surface->src_data.width *
 			conv_surface->src_data.height) * atom_size))
 		<< SHIFT(CDMA_D_DAIN_MAP_0, SURF_PACKED));
-	cdma_reg_write(D_DAIN_MAP, reg);
+	cdma_reg_write(D_DAIN_MAP, reg, nvdla_minor);
 
 	reg = ((conv_op->batch - 1)
 		<< SHIFT(CDMA_D_BATCH_NUMBER_0, BATCHES));
-	cdma_reg_write(D_BATCH_NUMBER, reg);
+	cdma_reg_write(D_BATCH_NUMBER, reg, nvdla_minor);
 
-	cdma_reg_write(D_BATCH_STRIDE, conv_op->batch_stride);
+	cdma_reg_write(D_BATCH_STRIDE, conv_op->batch_stride, nvdla_minor);
 
 	reg = ((conv_op->entry_per_slice - 1)
 		<< SHIFT(CDMA_D_ENTRY_PER_SLICE_0, ENTRIES));
-	cdma_reg_write(D_ENTRY_PER_SLICE, reg);
+	cdma_reg_write(D_ENTRY_PER_SLICE, reg, nvdla_minor);
 
 	reg = ((conv_op->fetch_grain - 1)
 		<< SHIFT(CDMA_D_FETCH_GRAIN_0, GRAINS));
-	cdma_reg_write(D_FETCH_GRAIN, reg);
+	cdma_reg_write(D_FETCH_GRAIN, reg, nvdla_minor);
 
 	reg = (map_weight_fmt[conv_op->weight_format]
 		<< SHIFT(CDMA_D_WEIGHT_FORMAT_0, WEIGHT_FORMAT));
-	cdma_reg_write(D_WEIGHT_FORMAT, reg);
+	cdma_reg_write(D_WEIGHT_FORMAT, reg, nvdla_minor);
 
 	reg = ((conv_op->bytes_per_kernel - 1)
 		<< SHIFT(CDMA_D_WEIGHT_SIZE_0_0, BYTE_PER_KERNEL));
-	cdma_reg_write(D_WEIGHT_SIZE_0, reg);
+	cdma_reg_write(D_WEIGHT_SIZE_0, reg, nvdla_minor);
 
 	reg = ((conv_surface->dst_data.channel - 1)
 		<< SHIFT(CDMA_D_WEIGHT_SIZE_1_0, WEIGHT_KERNEL));
-	cdma_reg_write(D_WEIGHT_SIZE_1, reg);
+	cdma_reg_write(D_WEIGHT_SIZE_1, reg, nvdla_minor);
 
 	reg = (map_ram[conv_surface->weight_data.type]
 		<< SHIFT(CDMA_D_WEIGHT_RAM_TYPE_0, WEIGHT_RAM_TYPE));
-	cdma_reg_write(D_WEIGHT_RAM_TYPE, reg);
+	cdma_reg_write(D_WEIGHT_RAM_TYPE, reg, nvdla_minor);
 
 	high = HIGH32BITS(weight_address);
 	low = LOW32BITS(weight_address);
-	cdma_reg_write(D_WEIGHT_ADDR_HIGH, high);
-	cdma_reg_write(D_WEIGHT_ADDR_LOW, low);
-	cdma_reg_write(D_WEIGHT_BYTES, conv_surface->weight_data.size);
+	cdma_reg_write(D_WEIGHT_ADDR_HIGH, high, nvdla_minor);
+	cdma_reg_write(D_WEIGHT_ADDR_LOW, low, nvdla_minor);
+	cdma_reg_write(D_WEIGHT_BYTES, conv_surface->weight_data.size, nvdla_minor);
 
 	if (conv_op->weight_format == WEIGHT_FORMAT_COMPRESSED) {
 		high = HIGH32BITS(wgs_address);
 		low = LOW32BITS(wgs_address);
-		cdma_reg_write(D_WGS_ADDR_HIGH, high);
-		cdma_reg_write(D_WGS_ADDR_LOW, low);
+		cdma_reg_write(D_WGS_ADDR_HIGH, high, nvdla_minor);
+		cdma_reg_write(D_WGS_ADDR_LOW, low, nvdla_minor);
 
 		high = HIGH32BITS(wmb_address);
 		low = LOW32BITS(wmb_address);
-		cdma_reg_write(D_WMB_ADDR_HIGH, high);
-		cdma_reg_write(D_WMB_ADDR_LOW, low);
-		cdma_reg_write(D_WMB_BYTES, conv_surface->wmb_data.size);
+		cdma_reg_write(D_WMB_ADDR_HIGH, high, nvdla_minor);
+		cdma_reg_write(D_WMB_ADDR_LOW, low, nvdla_minor);
+		cdma_reg_write(D_WMB_BYTES, conv_surface->wmb_data.size, nvdla_minor);
 	}
 
 	reg = (map_mean[conv_op->mean_format]
 		<< SHIFT(CDMA_D_MEAN_FORMAT_0, MEAN_FORMAT));
-	cdma_reg_write(D_MEAN_FORMAT, reg);
+	cdma_reg_write(D_MEAN_FORMAT, reg, nvdla_minor);
 
 	if (conv_op->mean_format == MEAN_FORMAT_ENABLE) {
 		reg = ((conv_op->mean_ry
@@ -686,7 +688,7 @@ processor_conv_program(struct dla_processor_group *group)
 			((conv_op->mean_gu
 			<< SHIFT(CDMA_D_MEAN_GLOBAL_0_0, MEAN_GU)) &
 			MASK(CDMA_D_MEAN_GLOBAL_0_0, MEAN_GU));
-		cdma_reg_write(D_MEAN_GLOBAL_0, reg);
+		cdma_reg_write(D_MEAN_GLOBAL_0, reg, nvdla_minor);
 
 		reg = ((conv_op->mean_bv
 			<< SHIFT(CDMA_D_MEAN_GLOBAL_1_0, MEAN_BV))&
@@ -694,7 +696,7 @@ processor_conv_program(struct dla_processor_group *group)
 			((conv_op->mean_ax
 			<< SHIFT(CDMA_D_MEAN_GLOBAL_1_0, MEAN_AX))&
 			MASK(CDMA_D_MEAN_GLOBAL_1_0, MEAN_AX));
-		cdma_reg_write(D_MEAN_GLOBAL_1, reg);
+		cdma_reg_write(D_MEAN_GLOBAL_1, reg, nvdla_minor);
 	}
 
 	if (conv_op->in_cvt.enable) {
@@ -702,20 +704,20 @@ processor_conv_program(struct dla_processor_group *group)
 			<< SHIFT(CDMA_D_CVT_CFG_0, CVT_EN)) |
 			(conv_op->in_cvt.truncate
 			<< SHIFT(CDMA_D_CVT_CFG_0, CVT_TRUNCATE));
-		cdma_reg_write(D_CVT_CFG, reg);
-		cdma_reg_write(D_CVT_OFFSET, conv_op->in_cvt.offset);
-		cdma_reg_write(D_CVT_SCALE, conv_op->in_cvt.scale);
+		cdma_reg_write(D_CVT_CFG, reg, nvdla_minor);
+		cdma_reg_write(D_CVT_OFFSET, conv_op->in_cvt.offset, nvdla_minor);
+		cdma_reg_write(D_CVT_SCALE, conv_op->in_cvt.scale, nvdla_minor);
 	} else {
 		reg = ((FIELD_ENUM(CDMA_D_CVT_CFG_0, CVT_EN, DISABLE))
 			<< SHIFT(CDMA_D_CVT_CFG_0, CVT_EN));
-		cdma_reg_write(D_CVT_CFG, reg);
+		cdma_reg_write(D_CVT_CFG, reg, nvdla_minor);
 	}
 
 	reg = ((conv_op->conv_stride_x - 1)
 		<< SHIFT(CDMA_D_CONV_STRIDE_0, CONV_X_STRIDE)) |
 		((conv_op->conv_stride_y - 1)
 		<< SHIFT(CDMA_D_CONV_STRIDE_0, CONV_Y_STRIDE));
-	cdma_reg_write(D_CONV_STRIDE, reg);
+	cdma_reg_write(D_CONV_STRIDE, reg, nvdla_minor);
 
 	reg = (conv_op->pad_x_left <<
 		SHIFT(CDMA_D_ZERO_PADDING_0, PAD_LEFT)) |
@@ -725,17 +727,17 @@ processor_conv_program(struct dla_processor_group *group)
 		<< SHIFT(CDMA_D_ZERO_PADDING_0, PAD_TOP)) |
 		(conv_op->pad_y_bottom
 		<< SHIFT(CDMA_D_ZERO_PADDING_0, PAD_BOTTOM));
-	cdma_reg_write(D_ZERO_PADDING,   reg);
+	cdma_reg_write(D_ZERO_PADDING,   reg, nvdla_minor);
 
 	reg = conv_op->pad_val <<
 		SHIFT(CDMA_D_ZERO_PADDING_VALUE_0, PAD_VALUE) &
 		MASK(CDMA_D_ZERO_PADDING_VALUE_0, PAD_VALUE);
-	cdma_reg_write(D_ZERO_PADDING_VALUE, reg);
+	cdma_reg_write(D_ZERO_PADDING_VALUE, reg, nvdla_minor);
 	reg = ((conv_op->weight_bank - 1)
 		<< SHIFT(CDMA_D_BANK_0, WEIGHT_BANK)) |
 		((conv_op->data_bank - 1)
 		<< SHIFT(CDMA_D_BANK_0, DATA_BANK));
-	cdma_reg_write(D_BANK, reg);
+	cdma_reg_write(D_BANK, reg, nvdla_minor);
 
 exit:
 	dla_trace("Exit: %s", __func__);
@@ -763,13 +765,13 @@ dla_conv_dump_config(struct dla_processor_group *group)
 }
 
 int
-dla_conv_program(struct dla_processor_group *group)
+dla_conv_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret;
 
 	dla_trace("Enter: %s", __func__);
 
-	ret = processor_conv_program(group);
+	ret = processor_conv_program(group, nvdla_minor);
 	if (ret)
 		goto exit;
 

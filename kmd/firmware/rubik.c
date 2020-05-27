@@ -61,7 +61,8 @@ static uint8_t map_bpe[] = {
 #if STAT_ENABLE
 void
 dla_rubik_stat_data(struct dla_processor *processor,
-					struct dla_processor_group *group)
+		    struct dla_processor_group *group,
+		    int32_t nvdla_minor)
 {
 	uint64_t end_time = 0;
 	struct dla_rubik_stat_desc *rubik_stat;
@@ -70,8 +71,8 @@ dla_rubik_stat_data(struct dla_processor *processor,
 
 	end_time = dla_get_time_us();
 
-	rubik_stat->read_stall = rubik_reg_read(D_PERF_READ_STALL);
-	rubik_stat->write_stall = rubik_reg_read(D_PERF_WRITE_STALL);
+	rubik_stat->read_stall = rubik_reg_read(D_PERF_READ_STALL, nvdla_minor);
+	rubik_stat->write_stall = rubik_reg_read(D_PERF_WRITE_STALL, nvdla_minor);
 	rubik_stat->runtime = (uint32_t)(end_time - group->start_time);
 }
 
@@ -87,7 +88,7 @@ dla_rubik_dump_stat(struct dla_processor *processor)
 #endif /* STAT_ENABLE */
 
 void
-dla_rubik_set_producer(int32_t group_id, int32_t __unused)
+dla_rubik_set_producer(int32_t group_id, int32_t __unused, int32_t nvdla_minor)
 {
 	uint32_t reg;
 
@@ -95,19 +96,19 @@ dla_rubik_set_producer(int32_t group_id, int32_t __unused)
 	 * set producer pointer for all sub-modules
 	 */
 	reg = group_id << SHIFT(RBK_S_POINTER_0, PRODUCER);
-	rubik_reg_write(S_POINTER, reg);
+	rubik_reg_write(S_POINTER, reg, nvdla_minor);
 }
 
 int
-dla_rubik_enable(struct dla_processor_group *group)
+dla_rubik_enable(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	uint32_t reg;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_trace("Enter: %s", __func__);
 
 	if (engine->stat_enable == (uint32_t)1) {
-		rubik_reg_write(D_PERF_ENABLE, 1);
+		rubik_reg_write(D_PERF_ENABLE, 1, nvdla_minor);
 		group->start_time = dla_get_time_us();
 	}
 
@@ -115,7 +116,7 @@ dla_rubik_enable(struct dla_processor_group *group)
 	 * enable all sub-modules
 	 */
 	reg = FIELD_ENUM(RBK_D_OP_ENABLE_0, OP_EN, ENABLE);
-	rubik_reg_write(D_OP_ENABLE, reg);
+	rubik_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 
 	dla_trace("Exit: %s", __func__);
 
@@ -129,13 +130,13 @@ dla_rubik_rdma_check(struct dla_processor_group *group)
 }
 
 static int32_t
-processor_rubik_program(struct dla_processor_group *group)
+processor_rubik_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint32_t reg, high, low;
 	uint64_t input_address = 0;
 	uint64_t output_address = 0;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 	struct dla_rubik_op_desc *rubik_op;
 	struct dla_rubik_surface_desc *rubik_surface;
 
@@ -152,10 +153,11 @@ processor_rubik_program(struct dla_processor_group *group)
 
 	/* get the addresses from task descriptor */
 	ret = dla_read_input_address(&rubik_surface->src_data,
-						&input_address,
-						group->op_desc->index,
-						group->roi_index,
-						1);
+				     &input_address,
+				     group->op_desc->index,
+				     group->roi_index,
+				     1,
+				     nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -171,73 +173,73 @@ processor_rubik_program(struct dla_processor_group *group)
 			SHIFT(RBK_D_MISC_CFG_0, RUBIK_MODE)) |
 			(((uint32_t)map_precision[rubik_op->precision]) <<
 			SHIFT(RBK_D_MISC_CFG_0, IN_PRECISION));
-	rubik_reg_write(D_MISC_CFG, reg);
+	rubik_reg_write(D_MISC_CFG, reg, nvdla_minor);
 	reg = (((uint32_t)map_ram_type[rubik_surface->src_data.type]) <<
 			SHIFT(RBK_D_DAIN_RAM_TYPE_0, DATAIN_RAM_TYPE));
-	rubik_reg_write(D_DAIN_RAM_TYPE, reg);
+	rubik_reg_write(D_DAIN_RAM_TYPE, reg, nvdla_minor);
 	reg =  ((rubik_surface->src_data.width-1) <<
 			SHIFT(RBK_D_DATAIN_SIZE_0_0, DATAIN_WIDTH)) |
 			((rubik_surface->src_data.height-1) <<
 			SHIFT(RBK_D_DATAIN_SIZE_0_0, DATAIN_HEIGHT));
-	rubik_reg_write(D_DATAIN_SIZE_0, reg);
+	rubik_reg_write(D_DATAIN_SIZE_0, reg, nvdla_minor);
 	reg =  ((rubik_surface->src_data.channel-1) <<
 			SHIFT(RBK_D_DATAIN_SIZE_1_0, DATAIN_CHANNEL));
-	rubik_reg_write(D_DATAIN_SIZE_1, reg);
+	rubik_reg_write(D_DATAIN_SIZE_1, reg, nvdla_minor);
 
 	high = HIGH32BITS(input_address);
 	low = LOW32BITS(input_address);
-	rubik_reg_write(D_DAIN_ADDR_LOW, low);
-	rubik_reg_write(D_DAIN_ADDR_HIGH, high);
+	rubik_reg_write(D_DAIN_ADDR_LOW, low, nvdla_minor);
+	rubik_reg_write(D_DAIN_ADDR_HIGH, high, nvdla_minor);
 	if (rubik_op->mode == RUBIK_MODE_MERGE) {
 		ASSERT_GOTO((rubik_surface->src_data.plane_stride != 0),
 			ret, ERR(INVALID_INPUT), exit);
 		ASSERT_GOTO(((rubik_surface->src_data.plane_stride&0x1F) == 0),
 			ret, ERR(INVALID_INPUT), exit);
 		rubik_reg_write(D_DAIN_PLANAR_STRIDE,
-			rubik_surface->src_data.plane_stride);
+			rubik_surface->src_data.plane_stride, nvdla_minor);
 	} else {
 		rubik_reg_write(D_DAIN_SURF_STRIDE,
-			rubik_surface->src_data.surf_stride);
+			rubik_surface->src_data.surf_stride, nvdla_minor);
 	}
 	rubik_reg_write(D_DAIN_LINE_STRIDE,
-				rubik_surface->src_data.line_stride);
+				rubik_surface->src_data.line_stride, nvdla_minor);
 
 	reg = (((uint32_t)map_ram_type[rubik_surface->dst_data.type]) <<
 			SHIFT(RBK_D_DAOUT_RAM_TYPE_0, DATAOUT_RAM_TYPE));
-	rubik_reg_write(D_DAOUT_RAM_TYPE, reg);
+	rubik_reg_write(D_DAOUT_RAM_TYPE, reg, nvdla_minor);
 	reg =  ((rubik_surface->dst_data.channel-1) <<
 			SHIFT(RBK_D_DATAOUT_SIZE_1_0, DATAOUT_CHANNEL));
-	rubik_reg_write(D_DATAOUT_SIZE_1, reg);
+	rubik_reg_write(D_DATAOUT_SIZE_1, reg, nvdla_minor);
 
 	high = HIGH32BITS(output_address);
 	low = LOW32BITS(output_address);
-	rubik_reg_write(D_DAOUT_ADDR_LOW, low);
-	rubik_reg_write(D_DAOUT_ADDR_HIGH, high);
+	rubik_reg_write(D_DAOUT_ADDR_LOW, low, nvdla_minor);
+	rubik_reg_write(D_DAOUT_ADDR_HIGH, high, nvdla_minor);
 
 	rubik_reg_write(D_DAOUT_LINE_STRIDE,
-			rubik_surface->dst_data.line_stride);
+			rubik_surface->dst_data.line_stride, nvdla_minor);
 	if (rubik_op->mode != RUBIK_MODE_SPLIT) {
 		rubik_reg_write(D_DAOUT_SURF_STRIDE,
-				rubik_surface->dst_data.surf_stride);
+				rubik_surface->dst_data.surf_stride, nvdla_minor);
 		if (rubik_op->mode == RUBIK_MODE_CONTRACT) {
 			reg = ((rubik_surface->dst_data.channel *
 				map_bpe[rubik_op->precision] + 31) >> 5) *
 				rubik_surface->src_data.surf_stride;
-			rubik_reg_write(D_CONTRACT_STRIDE_0, reg);
+			rubik_reg_write(D_CONTRACT_STRIDE_0, reg, nvdla_minor);
 
 			reg = rubik_op->stride_y *
 				rubik_surface->dst_data.line_stride;
-			rubik_reg_write(D_CONTRACT_STRIDE_1, reg);
+			rubik_reg_write(D_CONTRACT_STRIDE_1, reg, nvdla_minor);
 
 			reg = (((uint32_t)(rubik_op->stride_x-1)) <<
 			SHIFT(RBK_D_DECONV_STRIDE_0, DECONV_X_STRIDE)) |
 				(((uint32_t)(rubik_op->stride_y-1)) <<
 			SHIFT(RBK_D_DECONV_STRIDE_0, DECONV_Y_STRIDE));
-			rubik_reg_write(D_DECONV_STRIDE, reg);
+			rubik_reg_write(D_DECONV_STRIDE, reg, nvdla_minor);
 		}
 	} else {
 		rubik_reg_write(D_DAOUT_PLANAR_STRIDE,
-				rubik_surface->dst_data.plane_stride);
+				rubik_surface->dst_data.plane_stride, nvdla_minor);
 	}
 
 exit:
@@ -266,10 +268,10 @@ dla_rubik_dump_config(struct dla_processor_group *group)
 }
 
 int
-dla_rubik_program(struct dla_processor_group *group)
+dla_rubik_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_trace("Enter: %s", __func__);
 
@@ -280,9 +282,10 @@ dla_rubik_program(struct dla_processor_group *group)
 	}
 
 	dla_enable_intr(MASK(GLB_S_INTR_MASK_0, RUBIK_DONE_MASK1) |
-			MASK(GLB_S_INTR_MASK_0, RUBIK_DONE_MASK0));
+			MASK(GLB_S_INTR_MASK_0, RUBIK_DONE_MASK0),
+			nvdla_minor);
 
-	ret = processor_rubik_program(group);
+	ret = processor_rubik_program(group, nvdla_minor);
 	if (ret)
 		goto exit;
 

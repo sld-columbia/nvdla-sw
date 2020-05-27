@@ -42,7 +42,8 @@ static const uint8_t map_mem[] = {
 #if STAT_ENABLE
 void
 dla_bdma_stat_data(struct dla_processor *processor,
-					struct dla_processor_group *group)
+		   struct dla_processor_group *group,
+		   int32_t nvdla_minor)
 {
 	uint64_t end_time = 0;
 	struct dla_bdma_stat_desc *bdma_stat;
@@ -52,11 +53,11 @@ dla_bdma_stat_data(struct dla_processor *processor,
 	end_time = dla_get_time_us();
 
 	if (group->id == (uint32_t)0) {
-		bdma_stat->read_stall = bdma_reg_read(STATUS_GRP0_READ_STALL);
-		bdma_stat->write_stall = bdma_reg_read(STATUS_GRP0_WRITE_STALL);
+		bdma_stat->read_stall = bdma_reg_read(STATUS_GRP0_READ_STALL, nvdla_minor);
+		bdma_stat->write_stall = bdma_reg_read(STATUS_GRP0_WRITE_STALL, nvdla_minor);
 	} else {
-		bdma_stat->read_stall = bdma_reg_read(STATUS_GRP1_READ_STALL);
-		bdma_stat->write_stall = bdma_reg_read(STATUS_GRP1_WRITE_STALL);
+		bdma_stat->read_stall = bdma_reg_read(STATUS_GRP1_READ_STALL, nvdla_minor);
+		bdma_stat->write_stall = bdma_reg_read(STATUS_GRP1_WRITE_STALL, nvdla_minor);
 	}
 	bdma_stat->runtime = (uint32_t)(end_time - group->start_time);
 }
@@ -73,7 +74,7 @@ dla_bdma_dump_stat(struct dla_processor *processor)
 #endif /* STAT_ENABLE */
 
 void
-dla_bdma_set_producer(int32_t group_id, int32_t rdma_group_id)
+dla_bdma_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor)
 {
 	/**
 	 * There is no producer bit for BDMA operation,
@@ -83,9 +84,9 @@ dla_bdma_set_producer(int32_t group_id, int32_t rdma_group_id)
 }
 
 int
-dla_bdma_enable(struct dla_processor_group *group)
+dla_bdma_enable(struct dla_processor_group *group, int32_t nvdla_minor)
 {
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -95,8 +96,9 @@ dla_bdma_enable(struct dla_processor_group *group)
 	}
 
 	if (engine->stat_enable == (uint32_t)1) {
-		bdma_reg_write(CFG_STATUS, FIELD_ENUM(BDMA_CFG_STATUS_0,
-							STALL_COUNT_EN, YES));
+		bdma_reg_write(CFG_STATUS,
+			       FIELD_ENUM(BDMA_CFG_STATUS_0, STALL_COUNT_EN, YES),
+			       nvdla_minor);
 		group->start_time = dla_get_time_us();
 	}
 
@@ -104,11 +106,13 @@ dla_bdma_enable(struct dla_processor_group *group)
 	 * Launch BDMA transfer
 	 */
 	if (group->id == 0)
-		bdma_reg_write(CFG_LAUNCH0, FIELD_ENUM(BDMA_CFG_LAUNCH0_0,
-							GRP0_LAUNCH, YES));
+		bdma_reg_write(CFG_LAUNCH0,
+			       FIELD_ENUM(BDMA_CFG_LAUNCH0_0, GRP0_LAUNCH, YES),
+			       nvdla_minor);
 	else
-		bdma_reg_write(CFG_LAUNCH1, FIELD_ENUM(BDMA_CFG_LAUNCH1_0,
-							GRP1_LAUNCH, YES));
+		bdma_reg_write(CFG_LAUNCH1,
+			       FIELD_ENUM(BDMA_CFG_LAUNCH1_0, GRP1_LAUNCH, YES),
+			       nvdla_minor);
 
 exit:
 	dla_debug("Exit: %s\n", __func__);
@@ -126,21 +130,22 @@ dla_bdma_rdma_check(struct dla_processor_group *group)
  */
 static int32_t
 processor_bdma_program_slot(struct dla_bdma_surface_desc *bdma_surface,
-				struct dla_bdma_transfer_desc *transfer)
+			    struct dla_bdma_transfer_desc *transfer,
+			    int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint64_t source_addr = 0;
 	uint64_t destination_addr = 0;
 	uint32_t high, low, reg;
 	uint8_t  bdma_free_slots = 0;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s\n", __func__);
 
 	/* make sure there're enough free slots */
 	if (bdma_free_slots <= 0) {
 		do {
-			reg = bdma_reg_read(STATUS);
+			reg = bdma_reg_read(STATUS, nvdla_minor);
 			reg = (reg & MASK(BDMA_STATUS_0, FREE_SLOT)) >>
 					SHIFT(BDMA_STATUS_0, FREE_SLOT);
 		} while (reg == 0);
@@ -176,25 +181,25 @@ processor_bdma_program_slot(struct dla_bdma_surface_desc *bdma_surface,
 	/* config registers */
 	high = HIGH32BITS(source_addr);
 	low = LOW32BITS(source_addr);
-	bdma_reg_write(CFG_SRC_ADDR_LOW, low);
-	bdma_reg_write(CFG_SRC_ADDR_HIGH, high);
+	bdma_reg_write(CFG_SRC_ADDR_LOW, low, nvdla_minor);
+	bdma_reg_write(CFG_SRC_ADDR_HIGH, high, nvdla_minor);
 	high = HIGH32BITS(destination_addr);
 	low = LOW32BITS(destination_addr);
-	bdma_reg_write(CFG_DST_ADDR_LOW, low);
-	bdma_reg_write(CFG_DST_ADDR_HIGH, high);
-	bdma_reg_write(CFG_LINE, (transfer->line_size >> 5) - 1);
+	bdma_reg_write(CFG_DST_ADDR_LOW, low, nvdla_minor);
+	bdma_reg_write(CFG_DST_ADDR_HIGH, high, nvdla_minor);
+	bdma_reg_write(CFG_LINE, (transfer->line_size >> 5) - 1, nvdla_minor);
 	reg = (map_mem[bdma_surface->source_type] <<
 				SHIFT(BDMA_CFG_CMD_0, SRC_RAM_TYPE)) |
 		(map_mem[bdma_surface->destination_type] <<
 				SHIFT(BDMA_CFG_CMD_0, DST_RAM_TYPE));
-	bdma_reg_write(CFG_CMD, reg);
-	bdma_reg_write(CFG_LINE_REPEAT, transfer->line_repeat - 1);
-	bdma_reg_write(CFG_SRC_LINE, transfer->source_line);
-	bdma_reg_write(CFG_DST_LINE, transfer->destination_line);
-	bdma_reg_write(CFG_SURF_REPEAT, transfer->surface_repeat - 1);
-	bdma_reg_write(CFG_SRC_SURF, transfer->source_surface);
-	bdma_reg_write(CFG_DST_SURF, transfer->destination_surface);
-	bdma_reg_write(CFG_OP, FIELD_ENUM(BDMA_CFG_OP_0, EN, ENABLE));
+	bdma_reg_write(CFG_CMD, reg, nvdla_minor);
+	bdma_reg_write(CFG_LINE_REPEAT, transfer->line_repeat - 1, nvdla_minor);
+	bdma_reg_write(CFG_SRC_LINE, transfer->source_line, nvdla_minor);
+	bdma_reg_write(CFG_DST_LINE, transfer->destination_line, nvdla_minor);
+	bdma_reg_write(CFG_SURF_REPEAT, transfer->surface_repeat - 1, nvdla_minor);
+	bdma_reg_write(CFG_SRC_SURF, transfer->source_surface, nvdla_minor);
+	bdma_reg_write(CFG_DST_SURF, transfer->destination_surface, nvdla_minor);
+	bdma_reg_write(CFG_OP, FIELD_ENUM(BDMA_CFG_OP_0, EN, ENABLE), nvdla_minor);
 
 	dla_debug("Exit: %s\n", __func__);
 
@@ -237,12 +242,12 @@ dla_bdma_dump_config(struct dla_processor_group *group)
 }
 
 int
-dla_bdma_program(struct dla_processor_group *group)
+dla_bdma_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t i;
 	int32_t ret = 0;
 	struct dla_bdma_surface_desc *bdma_surface;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -266,13 +271,15 @@ dla_bdma_program(struct dla_processor_group *group)
 
 	for (i = 0; i < bdma_surface->num_transfers; i++) {
 		ret = processor_bdma_program_slot(bdma_surface,
-					&bdma_surface->transfers[i]);
+						  &bdma_surface->transfers[i],
+						  nvdla_minor);
 		if (ret)
 			goto exit;
 	}
 
 	dla_enable_intr(MASK(GLB_S_INTR_MASK_0, BDMA_DONE_MASK1) |
-			MASK(GLB_S_INTR_MASK_0, BDMA_DONE_MASK0));
+			MASK(GLB_S_INTR_MASK_0, BDMA_DONE_MASK0),
+			nvdla_minor);
 
 exit:
 	dla_debug("Exit: %s\n", __func__);

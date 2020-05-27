@@ -36,6 +36,10 @@
 
 #include "nvdla_interface.h"
 
+// TODO Make this configurable.
+// Edit this to change max supported number of NVDLA instances by KMD
+#define MAX_N_NVDLA 4
+
 #define BITS(num, range) ((((0xFFFFFFFF >> (31 - (1 ? range))) & \
 			(0xFFFFFFFF << (0 ? range))) & num) >> \
 			(0 ? range))
@@ -84,54 +88,55 @@
 #define RBK_REG(name)                RBK_##name##_0
 
 /* alias for register read for each sub-module */
-#define glb_reg_read(reg)           reg_read(GLB_REG(reg))
-#define bdma_reg_read(reg)          reg_read(BDMA_REG(reg))
-#define cdma_reg_read(reg)          reg_read(CDMA_REG(reg))
-#define csc_reg_read(reg)           reg_read(CSC_REG(reg))
-#define cmac_a_reg_read(reg)        reg_read(CMAC_A_REG(reg))
-#define cmac_b_reg_read(reg)        reg_read(CMAC_B_REG(reg))
-#define cacc_reg_read(reg)          reg_read(CACC_REG(reg))
-#define sdp_rdma_reg_read(reg)      reg_read(SDP_RDMA_REG(reg))
-#define sdp_reg_read(reg)           reg_read(SDP_REG(reg))
-#define pdp_rdma_reg_read(reg)      reg_read(PDP_RDMA_REG(reg))
-#define pdp_reg_read(reg)           reg_read(PDP_REG(reg))
-#define cdp_rdma_reg_read(reg)      reg_read(CDP_RDMA_REG(reg))
-#define cdp_reg_read(reg)           reg_read(CDP_REG(reg))
-#define rubik_reg_read(reg)         reg_read(RBK_REG(reg))
+#define glb_reg_read(reg, nvdla_minor)           reg_read(GLB_REG(reg), nvdla_minor)
+#define bdma_reg_read(reg, nvdla_minor)          reg_read(BDMA_REG(reg), nvdla_minor)
+#define cdma_reg_read(reg, nvdla_minor)          reg_read(CDMA_REG(reg), nvdla_minor)
+#define csc_reg_read(reg, nvdla_minor)           reg_read(CSC_REG(reg), nvdla_minor)
+#define cmac_a_reg_read(reg, nvdla_minor)        reg_read(CMAC_A_REG(reg), nvdla_minor)
+#define cmac_b_reg_read(reg, nvdla_minor)        reg_read(CMAC_B_REG(reg), nvdla_minor)
+#define cacc_reg_read(reg, nvdla_minor)          reg_read(CACC_REG(reg), nvdla_minor)
+#define sdp_rdma_reg_read(reg, nvdla_minor)      reg_read(SDP_RDMA_REG(reg), nvdla_minor)
+#define sdp_reg_read(reg, nvdla_minor)           reg_read(SDP_REG(reg), nvdla_minor)
+#define pdp_rdma_reg_read(reg, nvdla_minor)      reg_read(PDP_RDMA_REG(reg), nvdla_minor)
+#define pdp_reg_read(reg, nvdla_minor)           reg_read(PDP_REG(reg), nvdla_minor)
+#define cdp_rdma_reg_read(reg, nvdla_minor)      reg_read(CDP_RDMA_REG(reg), nvdla_minor)
+#define cdp_reg_read(reg, nvdla_minor)           reg_read(CDP_REG(reg), nvdla_minor)
+#define rubik_reg_read(reg, nvdla_minor)         reg_read(RBK_REG(reg), nvdla_minor)
 
 /* alias for register write for each sub-module */
-#define glb_reg_write(reg, val)      reg_write(GLB_REG(reg), val)
-#define bdma_reg_write(reg, val)     reg_write(BDMA_REG(reg), val)
-#define cdma_reg_write(reg, val)     reg_write(CDMA_REG(reg), val)
-#define csc_reg_write(reg, val)      reg_write(CSC_REG(reg), val)
-#define cmac_a_reg_write(reg, val)   reg_write(CMAC_A_REG(reg), val)
-#define cmac_b_reg_write(reg, val)   reg_write(CMAC_B_REG(reg), val)
-#define cacc_reg_write(reg, val)     reg_write(CACC_REG(reg), val)
-#define sdp_rdma_reg_write(reg, val) reg_write(SDP_RDMA_REG(reg), val)
-#define sdp_reg_write(reg, val)      reg_write(SDP_REG(reg), val)
-#define pdp_rdma_reg_write(reg, val) reg_write(PDP_RDMA_REG(reg), val)
-#define pdp_reg_write(reg, val)      reg_write(PDP_REG(reg), val)
-#define cdp_rdma_reg_write(reg, val) reg_write(CDP_RDMA_REG(reg), val)
-#define cdp_reg_write(reg, val)      reg_write(CDP_REG(reg), val)
-#define rubik_reg_write(reg, val)    reg_write(RBK_REG(reg), val)
+#define glb_reg_write(reg, val, nvdla_minor)      reg_write(GLB_REG(reg), val, nvdla_minor)
+#define bdma_reg_write(reg, val, nvdla_minor)     reg_write(BDMA_REG(reg), val, nvdla_minor)
+#define cdma_reg_write(reg, val, nvdla_minor)     reg_write(CDMA_REG(reg), val, nvdla_minor)
+#define csc_reg_write(reg, val, nvdla_minor)      reg_write(CSC_REG(reg), val, nvdla_minor)
+#define cmac_a_reg_write(reg, val, nvdla_minor)   reg_write(CMAC_A_REG(reg), val, nvdla_minor)
+#define cmac_b_reg_write(reg, val, nvdla_minor)   reg_write(CMAC_B_REG(reg), val, nvdla_minor)
+#define cacc_reg_write(reg, val, nvdla_minor)     reg_write(CACC_REG(reg), val, nvdla_minor)
+#define sdp_rdma_reg_write(reg, val, nvdla_minor) reg_write(SDP_RDMA_REG(reg), val, nvdla_minor)
+#define sdp_reg_write(reg, val, nvdla_minor)      reg_write(SDP_REG(reg), val, nvdla_minor)
+#define pdp_rdma_reg_write(reg, val, nvdla_minor) reg_write(PDP_RDMA_REG(reg), val, nvdla_minor)
+#define pdp_reg_write(reg, val, nvdla_minor)      reg_write(PDP_REG(reg), val, nvdla_minor)
+#define cdp_rdma_reg_write(reg, val, nvdla_minor) reg_write(CDP_RDMA_REG(reg), val, nvdla_minor)
+#define cdp_reg_write(reg, val, nvdla_minor)      reg_write(CDP_REG(reg), val, nvdla_minor)
+#define rubik_reg_write(reg, val, nvdla_minor)    reg_write(RBK_REG(reg), val, nvdla_minor)
 
-void reg_write(uint32_t addr, uint32_t reg);
-uint32_t reg_read(uint32_t addr);
+void reg_write(uint32_t addr, uint32_t reg, int32_t nvdla_minor);
+uint32_t reg_read(uint32_t addr, int32_t nvdla_minor);
 
 /**
  * Operation descriptor cache functions
  */
 void
-dla_put_op_desc(struct dla_common_op_desc *op_desc);
+dla_put_op_desc(struct dla_common_op_desc *op_desc, int32_t nvdla_minor);
 struct dla_common_op_desc
 *dla_get_op_desc(struct dla_task *task,
-			   int16_t index,
-			   uint8_t op_type,
-			   uint8_t roi_index);
+                 int16_t index,
+                 uint8_t op_type,
+                 uint8_t roi_index,
+                 int32_t nvdla_minor);
 void
 dla_dump_op_desc(struct dla_common_op_desc *desc);
 void
-dla_get_refcount(struct dla_common_op_desc *op_desc);
+dla_get_refcount(struct dla_common_op_desc *op_desc, int32_t nvdla_minor);
 void
 dla_init_op_cache(struct dla_engine *engine);
 
@@ -140,18 +145,20 @@ dla_init_op_cache(struct dla_engine *engine);
  */
 int
 dla_op_completion(struct dla_processor *processor,
-		      struct dla_processor_group *group);
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor);
 
 int32_t
 dla_read_lut(struct dla_engine *engine, int16_t index, void *dst);
 int
-dla_enable_intr(uint32_t mask);
+dla_enable_intr(uint32_t mask, int32_t nvdla_minor);
 int
-dla_disable_intr(uint32_t mask);
+dla_disable_intr(uint32_t mask, int32_t nvdla_minor);
 int
 utils_get_free_group(struct dla_processor *processor,
-			uint8_t *group_id,
-			uint8_t *rdma_id);
+		     uint8_t *group_id,
+		     uint8_t *rdma_id,
+		     int32_t nvdla_minor);
 int32_t
 dla_get_dma_cube_address(void *driver_context,
 						void *task_data,
@@ -164,17 +171,18 @@ dla_read_input_address(struct dla_data_cube *data,
 		       uint64_t *address,
 		       int16_t op_index,
 		       uint8_t roi_index,
-		       uint8_t bpp);
+		       uint8_t bpp,
+		       int32_t nvdla_minor);
 
 /**
  * BDMA operations
  */
 void
-dla_bdma_set_producer(int32_t group_id, int32_t rdma_group_id);
+dla_bdma_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor);
 int
-dla_bdma_enable(struct dla_processor_group *group);
+dla_bdma_enable(struct dla_processor_group *group, int32_t nvdla_minor);
 int
-dla_bdma_program(struct dla_processor_group *group);
+dla_bdma_program(struct dla_processor_group *group, int32_t nvdla_minor);
 int
 dla_bdma_is_ready(struct dla_processor *processor,
 			    struct dla_processor_group *group);
@@ -186,7 +194,8 @@ dla_bdma_rdma_check(struct dla_processor_group *group);
 #if STAT_ENABLE
 void
 dla_bdma_stat_data(struct dla_processor *processor,
-				struct dla_processor_group *group);
+		   struct dla_processor_group *group,
+		   int32_t nvdla_minor);
 void
 dla_bdma_dump_stat(struct dla_processor *processor);
 
@@ -202,11 +211,11 @@ dla_bdma_dump_stat(struct dla_processor *processor) {}
  * Convolution operations
  */
 void
-dla_conv_set_producer(int32_t group_id, int32_t rdma_group_id);
+dla_conv_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor);
 int
-dla_conv_enable(struct dla_processor_group *group);
+dla_conv_enable(struct dla_processor_group *group, int32_t nvdla_minor);
 int
-dla_conv_program(struct dla_processor_group *group);
+dla_conv_program(struct dla_processor_group *group, int32_t nvdla_minor);
 int
 dla_conv_is_ready(struct dla_processor *processor,
 			    struct dla_processor_group *group);
@@ -218,7 +227,8 @@ dla_conv_rdma_check(struct dla_processor_group *group);
 #if STAT_ENABLE
 void
 dla_conv_stat_data(struct dla_processor *processor,
-				struct dla_processor_group *group);
+		   struct dla_processor_group *group,
+		   int32_t nvdla_minor);
 void
 dla_conv_dump_stat(struct dla_processor *processor);
 
@@ -234,11 +244,11 @@ dla_conv_dump_stat(struct dla_processor *processor) {}
  * SDP operations
  */
 void
-dla_sdp_set_producer(int32_t group_id, int32_t rdma_group_id);
+dla_sdp_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor);
 int
-dla_sdp_enable(struct dla_processor_group *group);
+dla_sdp_enable(struct dla_processor_group *group, int32_t nvdla_minor);
 int
-dla_sdp_program(struct dla_processor_group *group);
+dla_sdp_program(struct dla_processor_group *group, int32_t nvdla_minor);
 int
 dla_sdp_is_ready(struct dla_processor *processor,
 			   struct dla_processor_group *group);
@@ -250,7 +260,8 @@ dla_sdp_rdma_check(struct dla_processor_group *group);
 #if STAT_ENABLE
 void
 dla_sdp_stat_data(struct dla_processor *processor,
-				struct dla_processor_group *group);
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor);
 void
 dla_sdp_dump_stat(struct dla_processor *processor);
 
@@ -266,11 +277,11 @@ dla_sdp_dump_stat(struct dla_processor *processor) {}
  * PDP operations
  */
 void
-dla_pdp_set_producer(int32_t group_id, int32_t rdma_group_id);
+dla_pdp_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor);
 int
-dla_pdp_enable(struct dla_processor_group *group);
+dla_pdp_enable(struct dla_processor_group *group, int32_t nvdla_minor);
 int
-dla_pdp_program(struct dla_processor_group *group);
+dla_pdp_program(struct dla_processor_group *group, int32_t nvdla_minor);
 int
 dla_pdp_is_ready(struct dla_processor *processor,
 			   struct dla_processor_group *group);
@@ -282,7 +293,8 @@ dla_pdp_rdma_check(struct dla_processor_group *group);
 #if STAT_ENABLE
 void
 dla_pdp_stat_data(struct dla_processor *processor,
-				struct dla_processor_group *group);
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor);
 void
 dla_pdp_dump_stat(struct dla_processor *processor);
 
@@ -298,11 +310,11 @@ dla_pdp_dump_stat(struct dla_processor *processor) {}
  * CDP operations
  */
 void
-dla_cdp_set_producer(int32_t group_id, int32_t rdma_group_id);
+dla_cdp_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor);
 int
-dla_cdp_enable(struct dla_processor_group *group);
+dla_cdp_enable(struct dla_processor_group *group, int32_t nvdla_minor);
 int
-dla_cdp_program(struct dla_processor_group *group);
+dla_cdp_program(struct dla_processor_group *group, int32_t nvdla_minor);
 int
 dla_cdp_is_ready(struct dla_processor *processor,
 			   struct dla_processor_group *group);
@@ -314,7 +326,8 @@ dla_cdp_rdma_check(struct dla_processor_group *group);
 #if STAT_ENABLE
 void
 dla_cdp_stat_data(struct dla_processor *processor,
-				struct dla_processor_group *group);
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor);
 void
 dla_cdp_dump_stat(struct dla_processor *processor);
 
@@ -330,11 +343,11 @@ dla_cdp_dump_stat(struct dla_processor *processor) {}
  * RUBIK operations
  */
 void
-dla_rubik_set_producer(int32_t group_id, int32_t rdma_group_id);
+dla_rubik_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor);
 int
-dla_rubik_enable(struct dla_processor_group *group);
+dla_rubik_enable(struct dla_processor_group *group, int32_t nvdla_minor);
 int
-dla_rubik_program(struct dla_processor_group *group);
+dla_rubik_program(struct dla_processor_group *group, int32_t nvdla_minor);
 int
 dla_rubik_is_ready(struct dla_processor *processor,
 			     struct dla_processor_group *group);
@@ -346,7 +359,8 @@ dla_rubik_rdma_check(struct dla_processor_group *group);
 #if STAT_ENABLE
 void
 dla_rubik_stat_data(struct dla_processor *processor,
-				struct dla_processor_group *group);
+		    struct dla_processor_group *group,
+		    int32_t nvdla_minor);
 void
 dla_rubik_dump_stat(struct dla_processor *processor);
 

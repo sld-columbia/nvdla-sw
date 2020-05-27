@@ -56,6 +56,12 @@
 #include <nvdla_linux.h>
 #include <nvdla_ioctl.h>
 
+#include <drm/drm.h>
+#include <drm/drm_drv.h>
+#include <drm/drm_gem_cma_helper.h>
+
+#include <dla_engine.h>
+
 static struct nvdla_config nvdla_config_os_initial = {
 	.atom_size = 32,
 	.bdma_enable = true,
@@ -80,18 +86,18 @@ static struct nvdla_config nvdla_config_large = {
 
 void dla_debug(const char *str, ...)
 {
-	va_list args;
-	va_start(args, str);
-	vprintk(pr_fmt(str), args);
-	va_end(args);
+	/* va_list args; */
+	/* va_start(args, str); */
+	/* vprintk(pr_fmt(str), args); */
+	/* va_end(args); */
 }
 
 void dla_info(const char *str, ...)
 {
-	va_list args;
-	va_start(args, str);
-	vprintk(str, args);
-	va_end(args);
+	/* va_list args; */
+	/* va_start(args, str); */
+	/* vprintk(str, args); */
+	/* va_end(args); */
 }
 
 void dla_warn(const char *str, ...)
@@ -311,9 +317,12 @@ int32_t nvdla_task_submit(struct nvdla_device *nvdla_dev, struct nvdla_task *tas
 {
 	int32_t err = 0;
 	uint32_t task_complete = 0;
-
+	struct dla_engine *engine_context = (struct dla_engine *) nvdla_dev->engine_context;
+	
 	nvdla_dev->task = task;
-
+	
+	dla_info("SUBMIT: minor %d\n", engine_context->nvdla_minor);
+	
 	err = dla_execute_task(nvdla_dev->engine_context, (void *)task, nvdla_dev->config_data);
 	if (err) {
 		pr_err("Task execution failed\n");
@@ -367,7 +376,8 @@ static int32_t nvdla_probe(struct platform_device *pdev)
 	struct nvdla_device *nvdla_dev;
 	struct device *dev = &pdev->dev;
 	const struct of_device_id *match;
-
+	struct drm_device *drm;
+	
 	if (!pdev->dev.of_node)
 		return -EINVAL;
 
@@ -407,12 +417,19 @@ static int32_t nvdla_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	dla_register_driver(&nvdla_dev->engine_context, (void *)nvdla_dev);
-	dla_clear_task(nvdla_dev->engine_context);
-
 	err = nvdla_drm_probe(nvdla_dev);
 	if (err)
 		dev_err(&pdev->dev, "failed to register drm device\n");
+
+	drm = nvdla_dev->drm; 
+	
+	dla_info("minor primary %d minor render %d\n",
+		 drm->primary->index,
+		 drm->render->index);
+
+	dla_register_driver(&nvdla_dev->engine_context, (void *)nvdla_dev, drm->primary->index);
+	dla_clear_task(nvdla_dev->engine_context);
+
 
 	return err;
 }

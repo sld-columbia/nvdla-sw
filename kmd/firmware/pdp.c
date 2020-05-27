@@ -82,7 +82,8 @@ static const uint32_t recip_kernel_size[2][8] = {
 #if STAT_ENABLE
 void
 dla_pdp_stat_data(struct dla_processor *processor,
-					struct dla_processor_group *group)
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor)
 {
 	uint64_t end_time = 0;
 	struct dla_pdp_stat_desc *pdp_stat;
@@ -91,7 +92,7 @@ dla_pdp_stat_data(struct dla_processor *processor,
 
 	end_time = dla_get_time_us();
 
-	pdp_stat->write_stall = pdp_reg_read(D_PERF_WRITE_STALL);
+	pdp_stat->write_stall = pdp_reg_read(D_PERF_WRITE_STALL, nvdla_minor);
 	pdp_stat->runtime = (uint32_t)(end_time - group->start_time);
 }
 
@@ -121,7 +122,7 @@ get_fly_mode(uint8_t type)
 }
 
 void
-dla_pdp_set_producer(int32_t group_id, int32_t rdma_group_id)
+dla_pdp_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor)
 {
 	uint32_t reg;
 
@@ -130,20 +131,20 @@ dla_pdp_set_producer(int32_t group_id, int32_t rdma_group_id)
 	dla_debug("group id %d rdma id %d\n", group_id, rdma_group_id);
 
 	reg = group_id << SHIFT(PDP_S_POINTER_0, PRODUCER);
-	pdp_reg_write(S_POINTER, reg);
+	pdp_reg_write(S_POINTER, reg, nvdla_minor);
 
 	reg = rdma_group_id << SHIFT(PDP_RDMA_S_POINTER_0, PRODUCER);
-	pdp_rdma_reg_write(S_POINTER, reg);
+	pdp_rdma_reg_write(S_POINTER, reg, nvdla_minor);
 
 	dla_trace("Exit: %s", __func__);
 }
 
 int
-dla_pdp_enable(struct dla_processor_group *group)
+dla_pdp_enable(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint32_t reg;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_trace("Enter: %s", __func__);
 
@@ -154,7 +155,7 @@ dla_pdp_enable(struct dla_processor_group *group)
 
 	if (engine->stat_enable == (uint32_t)1) {
 		reg = FIELD_ENUM(PDP_D_PERF_ENABLE_0, DMA_EN, ENABLE);
-		pdp_reg_write(D_PERF_ENABLE, reg);
+		pdp_reg_write(D_PERF_ENABLE, reg, nvdla_minor);
 		group->start_time = dla_get_time_us();
 	}
 
@@ -165,10 +166,10 @@ dla_pdp_enable(struct dla_processor_group *group)
 	 */
 	if (group->is_rdma_needed) {
 		reg = FIELD_ENUM(PDP_RDMA_D_OP_ENABLE_0, OP_EN, ENABLE);
-		pdp_rdma_reg_write(D_OP_ENABLE, reg);
+		pdp_rdma_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 	}
 	reg = FIELD_ENUM(PDP_D_OP_ENABLE_0, OP_EN, ENABLE);
-	pdp_reg_write(D_OP_ENABLE, reg);
+	pdp_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 
 exit:
 	dla_trace("Exit: %s", __func__);
@@ -262,13 +263,13 @@ exit:
 }
 
 static int
-processor_pdp_program(struct dla_processor_group *group)
+processor_pdp_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint32_t reg, high, low;
 	uint64_t input_address = 0;
 	uint64_t output_address = 0;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 	struct dla_pdp_op_desc *pdp_op;
 	struct dla_pdp_surface_desc *pdp_surface;
 
@@ -282,10 +283,11 @@ processor_pdp_program(struct dla_processor_group *group)
 		goto exit;
 
 	ret = dla_read_input_address(&pdp_surface->src_data,
-					&input_address,
-					group->op_desc->index,
-					group->roi_index,
-					1);
+				     &input_address,
+				     group->op_desc->index,
+				     group->roi_index,
+				     1,
+				     nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -300,32 +302,32 @@ processor_pdp_program(struct dla_processor_group *group)
 	if (pdp_surface->src_data.type != DLA_MEM_HW) {
 		/* PDP RDMA */
 		pdp_rdma_reg_write(D_DATA_CUBE_IN_WIDTH,
-				pdp_surface->src_data.width - 1);
+				pdp_surface->src_data.width - 1, nvdla_minor);
 		pdp_rdma_reg_write(D_DATA_CUBE_IN_HEIGHT,
-				pdp_surface->src_data.height - 1);
+				pdp_surface->src_data.height - 1, nvdla_minor);
 		pdp_rdma_reg_write(D_DATA_CUBE_IN_CHANNEL,
-				pdp_surface->src_data.channel - 1);
+				pdp_surface->src_data.channel - 1, nvdla_minor);
 
 		high = HIGH32BITS(input_address);
 		low  = LOW32BITS(input_address);
-		pdp_rdma_reg_write(D_SRC_BASE_ADDR_HIGH, high);
-		pdp_rdma_reg_write(D_SRC_BASE_ADDR_LOW, low);
+		pdp_rdma_reg_write(D_SRC_BASE_ADDR_HIGH, high, nvdla_minor);
+		pdp_rdma_reg_write(D_SRC_BASE_ADDR_LOW, low, nvdla_minor);
 		pdp_rdma_reg_write(D_SRC_LINE_STRIDE,
-				pdp_surface->src_data.line_stride);
+				pdp_surface->src_data.line_stride, nvdla_minor);
 		pdp_rdma_reg_write(D_SRC_SURFACE_STRIDE,
-				pdp_surface->src_data.surf_stride);
+				pdp_surface->src_data.surf_stride, nvdla_minor);
 
 		reg = (map_precision[pdp_op->precision]
 			<< SHIFT(PDP_RDMA_D_DATA_FORMAT_0, INPUT_DATA));
-		pdp_rdma_reg_write(D_DATA_FORMAT, reg);
+		pdp_rdma_reg_write(D_DATA_FORMAT, reg, nvdla_minor);
 
 		reg = map_ram[pdp_surface->src_data.type]
 			<< SHIFT(PDP_RDMA_D_SRC_RAM_CFG_0, SRC_RAM_TYPE);
-		pdp_rdma_reg_write(D_SRC_RAM_CFG, reg);
+		pdp_rdma_reg_write(D_SRC_RAM_CFG, reg, nvdla_minor);
 
 		reg = ((pdp_op->split_num - 1)
 			 << SHIFT(PDP_RDMA_D_OPERATION_MODE_CFG_0, SPLIT_NUM));
-		pdp_rdma_reg_write(D_OPERATION_MODE_CFG, reg);
+		pdp_rdma_reg_write(D_OPERATION_MODE_CFG, reg, nvdla_minor);
 
 		reg = (map_pool_kernel[pdp_op->pool_width]
 			<< SHIFT(PDP_RDMA_D_POOLING_KERNEL_CFG_0,
@@ -333,11 +335,11 @@ processor_pdp_program(struct dla_processor_group *group)
 			((pdp_op->stride_x - 1)
 			<< SHIFT(PDP_RDMA_D_POOLING_KERNEL_CFG_0,
 							KERNEL_STRIDE_WIDTH));
-		pdp_rdma_reg_write(D_POOLING_KERNEL_CFG, reg);
+		pdp_rdma_reg_write(D_POOLING_KERNEL_CFG, reg, nvdla_minor);
 
 		reg = (pdp_op->pad_left
 			<< SHIFT(PDP_RDMA_D_POOLING_PADDING_CFG_0, PAD_WIDTH));
-		pdp_rdma_reg_write(D_POOLING_PADDING_CFG, reg);
+		pdp_rdma_reg_write(D_POOLING_PADDING_CFG, reg, nvdla_minor);
 
 		reg = ((pdp_op->partial_in_width_first == 0 ? 0 :
 				pdp_op->partial_in_width_first - 1)
@@ -351,7 +353,7 @@ processor_pdp_program(struct dla_processor_group *group)
 				pdp_op->partial_in_width_last - 1)
 			<< SHIFT(PDP_RDMA_D_PARTIAL_WIDTH_IN_0,
 				PARTIAL_WIDTH_IN_LAST));
-		pdp_rdma_reg_write(D_PARTIAL_WIDTH_IN, reg);
+		pdp_rdma_reg_write(D_PARTIAL_WIDTH_IN, reg, nvdla_minor);
 	} else {
 		ASSERT_GOTO(pdp_op->split_num == 1, ret,
 					ERR(INVALID_INPUT), exit);
@@ -359,27 +361,27 @@ processor_pdp_program(struct dla_processor_group *group)
 
 	reg = ((pdp_surface->src_data.width - 1)
 		<< SHIFT(PDP_D_DATA_CUBE_IN_WIDTH_0, CUBE_IN_WIDTH));
-	pdp_reg_write(D_DATA_CUBE_IN_WIDTH, reg);
+	pdp_reg_write(D_DATA_CUBE_IN_WIDTH, reg, nvdla_minor);
 
 	reg = ((pdp_surface->src_data.height - 1)
 		<< SHIFT(PDP_D_DATA_CUBE_IN_HEIGHT_0, CUBE_IN_HEIGHT));
-	pdp_reg_write(D_DATA_CUBE_IN_HEIGHT, reg);
+	pdp_reg_write(D_DATA_CUBE_IN_HEIGHT, reg, nvdla_minor);
 
 	reg = ((pdp_surface->src_data.channel - 1)
 		<< SHIFT(PDP_D_DATA_CUBE_IN_CHANNEL_0, CUBE_IN_CHANNEL));
-	pdp_reg_write(D_DATA_CUBE_IN_CHANNEL, reg);
+	pdp_reg_write(D_DATA_CUBE_IN_CHANNEL, reg, nvdla_minor);
 
 	reg = ((pdp_surface->dst_data.width - 1)
 		<< SHIFT(PDP_D_DATA_CUBE_OUT_WIDTH_0, CUBE_OUT_WIDTH));
-	pdp_reg_write(D_DATA_CUBE_OUT_WIDTH, reg);
+	pdp_reg_write(D_DATA_CUBE_OUT_WIDTH, reg, nvdla_minor);
 
 	reg = ((pdp_surface->dst_data.height - 1)
 		<< SHIFT(PDP_D_DATA_CUBE_OUT_HEIGHT_0, CUBE_OUT_HEIGHT));
-	pdp_reg_write(D_DATA_CUBE_OUT_HEIGHT, reg);
+	pdp_reg_write(D_DATA_CUBE_OUT_HEIGHT, reg, nvdla_minor);
 
 	reg = ((pdp_surface->dst_data.channel - 1)
 		<< SHIFT(PDP_D_DATA_CUBE_OUT_CHANNEL_0, CUBE_OUT_CHANNEL));
-	pdp_reg_write(D_DATA_CUBE_OUT_CHANNEL, reg);
+	pdp_reg_write(D_DATA_CUBE_OUT_CHANNEL, reg, nvdla_minor);
 
 	reg = (map_pool[pdp_op->pool_mode]
 		<< SHIFT(PDP_D_OPERATION_MODE_CFG_0, POOLING_METHOD)) |
@@ -387,7 +389,7 @@ processor_pdp_program(struct dla_processor_group *group)
 		<< SHIFT(PDP_D_OPERATION_MODE_CFG_0, FLYING_MODE)) |
 		((pdp_op->split_num - 1)
 		<< SHIFT(PDP_D_OPERATION_MODE_CFG_0, SPLIT_NUM));
-	pdp_reg_write(D_OPERATION_MODE_CFG, reg);
+	pdp_reg_write(D_OPERATION_MODE_CFG, reg, nvdla_minor);
 
 	reg = ((pdp_op->partial_in_width_first == 0 ? 0 :
 			pdp_op->partial_in_width_first-1)
@@ -398,7 +400,7 @@ processor_pdp_program(struct dla_processor_group *group)
 		((pdp_op->partial_in_width_last == 0 ? 0 :
 			pdp_op->partial_in_width_last-1)
 		<< SHIFT(PDP_D_PARTIAL_WIDTH_IN_0, PARTIAL_WIDTH_IN_LAST));
-	pdp_reg_write(D_PARTIAL_WIDTH_IN, reg);
+	pdp_reg_write(D_PARTIAL_WIDTH_IN, reg, nvdla_minor);
 
 	reg = ((pdp_op->partial_width_first == 0 ? 0 :
 			pdp_op->partial_width_first-1)
@@ -409,7 +411,7 @@ processor_pdp_program(struct dla_processor_group *group)
 		((pdp_op->partial_width_last == 0 ? 0 :
 			pdp_op->partial_width_last-1)
 		<< SHIFT(PDP_D_PARTIAL_WIDTH_OUT_0, PARTIAL_WIDTH_OUT_LAST));
-	pdp_reg_write(D_PARTIAL_WIDTH_OUT, reg);
+	pdp_reg_write(D_PARTIAL_WIDTH_OUT, reg, nvdla_minor);
 
 	reg = (map_pool_kernel[pdp_op->pool_width]
 		<< SHIFT(PDP_D_POOLING_KERNEL_CFG_0, KERNEL_WIDTH)) |
@@ -419,14 +421,14 @@ processor_pdp_program(struct dla_processor_group *group)
 		<< SHIFT(PDP_D_POOLING_KERNEL_CFG_0, KERNEL_STRIDE_WIDTH)) |
 		((pdp_op->stride_y - 1)
 		<< SHIFT(PDP_D_POOLING_KERNEL_CFG_0, KERNEL_STRIDE_HEIGHT));
-	pdp_reg_write(D_POOLING_KERNEL_CFG, reg);
+	pdp_reg_write(D_POOLING_KERNEL_CFG, reg, nvdla_minor);
 
 	pdp_reg_write(D_RECIP_KERNEL_WIDTH,
 			recip_kernel_size[pdp_op->precision ==
-					PRECISION_FP16][pdp_op->pool_width]);
+					PRECISION_FP16][pdp_op->pool_width], nvdla_minor);
 	pdp_reg_write(D_RECIP_KERNEL_HEIGHT,
 			recip_kernel_size[pdp_op->precision ==
-					PRECISION_FP16][pdp_op->pool_height]);
+					PRECISION_FP16][pdp_op->pool_height], nvdla_minor);
 
 	reg = (pdp_op->pad_left
 		<< SHIFT(PDP_D_POOLING_PADDING_CFG_0, PAD_LEFT)) |
@@ -444,37 +446,37 @@ processor_pdp_program(struct dla_processor_group *group)
 						ERR(INVALID_INPUT), exit);
 	}
 
-	pdp_reg_write(D_POOLING_PADDING_CFG, reg);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_1_CFG, pdp_op->padding_value[0]);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_2_CFG, pdp_op->padding_value[1]);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_3_CFG, pdp_op->padding_value[2]);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_4_CFG, pdp_op->padding_value[3]);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_5_CFG, pdp_op->padding_value[4]);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_6_CFG, pdp_op->padding_value[5]);
-	pdp_reg_write(D_POOLING_PADDING_VALUE_7_CFG, pdp_op->padding_value[6]);
+	pdp_reg_write(D_POOLING_PADDING_CFG, reg, nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_1_CFG, pdp_op->padding_value[0], nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_2_CFG, pdp_op->padding_value[1], nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_3_CFG, pdp_op->padding_value[2], nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_4_CFG, pdp_op->padding_value[3], nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_5_CFG, pdp_op->padding_value[4], nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_6_CFG, pdp_op->padding_value[5], nvdla_minor);
+	pdp_reg_write(D_POOLING_PADDING_VALUE_7_CFG, pdp_op->padding_value[6], nvdla_minor);
 
 	if (pdp_surface->src_data.type != DLA_MEM_HW) {
 		pdp_reg_write(D_SRC_LINE_STRIDE,
-				pdp_surface->src_data.line_stride);
+				pdp_surface->src_data.line_stride, nvdla_minor);
 		pdp_reg_write(D_SRC_SURFACE_STRIDE,
-				pdp_surface->src_data.surf_stride);
+				pdp_surface->src_data.surf_stride, nvdla_minor);
 	}
 
 	high = HIGH32BITS(output_address);
 	low = LOW32BITS(output_address);
-	pdp_reg_write(D_DST_BASE_ADDR_LOW, low);
-	pdp_reg_write(D_DST_BASE_ADDR_HIGH, high);
+	pdp_reg_write(D_DST_BASE_ADDR_LOW, low, nvdla_minor);
+	pdp_reg_write(D_DST_BASE_ADDR_HIGH, high, nvdla_minor);
 
-	pdp_reg_write(D_DST_LINE_STRIDE, pdp_surface->dst_data.line_stride);
-	pdp_reg_write(D_DST_SURFACE_STRIDE, pdp_surface->dst_data.surf_stride);
+	pdp_reg_write(D_DST_LINE_STRIDE, pdp_surface->dst_data.line_stride, nvdla_minor);
+	pdp_reg_write(D_DST_SURFACE_STRIDE, pdp_surface->dst_data.surf_stride, nvdla_minor);
 
 	reg = (map_ram[pdp_surface->dst_data.type]
 		<< SHIFT(PDP_D_DST_RAM_CFG_0, DST_RAM_TYPE));
-	pdp_reg_write(D_DST_RAM_CFG, reg);
+	pdp_reg_write(D_DST_RAM_CFG, reg, nvdla_minor);
 
 	reg = (map_precision[pdp_op->precision]
 		<< SHIFT(PDP_D_DATA_FORMAT_0, INPUT_DATA));
-	pdp_reg_write(D_DATA_FORMAT, reg);
+	pdp_reg_write(D_DATA_FORMAT, reg, nvdla_minor);
 
 exit:
 	dla_trace("Exit: %s", __func__);
@@ -502,7 +504,7 @@ dla_pdp_dump_config(struct dla_processor_group *group)
 }
 
 int
-dla_pdp_program(struct dla_processor_group *group)
+dla_pdp_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret;
 
@@ -514,9 +516,10 @@ dla_pdp_program(struct dla_processor_group *group)
 	}
 
 	dla_enable_intr(MASK(GLB_S_INTR_MASK_0, PDP_DONE_MASK1) |
-			MASK(GLB_S_INTR_MASK_0, PDP_DONE_MASK0));
+			MASK(GLB_S_INTR_MASK_0, PDP_DONE_MASK0),
+			nvdla_minor);
 
-	ret = processor_pdp_program(group);
+	ret = processor_pdp_program(group, nvdla_minor);
 	if (ret)
 		goto exit;
 

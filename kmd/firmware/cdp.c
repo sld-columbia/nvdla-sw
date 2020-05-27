@@ -59,7 +59,8 @@ static const uint8_t map_perf_lut[] = {
 #if STAT_ENABLE
 void
 dla_cdp_stat_data(struct dla_processor *processor,
-					struct dla_processor_group *group)
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor)
 {
 	uint64_t end_time = 0;
 	struct dla_cdp_stat_desc *cdp_stat;
@@ -68,12 +69,12 @@ dla_cdp_stat_data(struct dla_processor *processor,
 
 	end_time = dla_get_time_us();
 
-	cdp_stat->write_stall = cdp_reg_read(D_PERF_WRITE_STALL);
-	cdp_stat->lut_uflow = cdp_reg_read(D_PERF_LUT_UFLOW);
-	cdp_stat->lut_oflow = cdp_reg_read(D_PERF_LUT_OFLOW);
-	cdp_stat->lut_hybrid = cdp_reg_read(D_PERF_LUT_HYBRID);
-	cdp_stat->lut_le_hit = cdp_reg_read(D_PERF_LUT_LE_HIT);
-	cdp_stat->lut_lo_hit = cdp_reg_read(D_PERF_LUT_LO_HIT);
+	cdp_stat->write_stall = cdp_reg_read(D_PERF_WRITE_STALL, nvdla_minor);
+	cdp_stat->lut_uflow = cdp_reg_read(D_PERF_LUT_UFLOW, nvdla_minor);
+	cdp_stat->lut_oflow = cdp_reg_read(D_PERF_LUT_OFLOW, nvdla_minor);
+	cdp_stat->lut_hybrid = cdp_reg_read(D_PERF_LUT_HYBRID, nvdla_minor);
+	cdp_stat->lut_le_hit = cdp_reg_read(D_PERF_LUT_LE_HIT, nvdla_minor);
+	cdp_stat->lut_lo_hit = cdp_reg_read(D_PERF_LUT_LO_HIT, nvdla_minor);
 	cdp_stat->runtime = (uint32_t)(end_time - group->start_time);
 }
 
@@ -95,7 +96,7 @@ map_local_size(uint8_t local_size)
 }
 
 void
-dla_cdp_set_producer(int32_t group_id, int32_t rdma_group_id)
+dla_cdp_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor)
 {
 	uint32_t reg;
 
@@ -103,17 +104,17 @@ dla_cdp_set_producer(int32_t group_id, int32_t rdma_group_id)
 	 * set producer pointer for all sub-modules
 	 */
 	reg = group_id << SHIFT(CDP_S_POINTER_0, PRODUCER);
-	cdp_reg_write(S_POINTER, reg);
+	cdp_reg_write(S_POINTER, reg, nvdla_minor);
 	reg = group_id << SHIFT(CDP_RDMA_S_POINTER_0, PRODUCER);
-	cdp_rdma_reg_write(S_POINTER, reg);
+	cdp_rdma_reg_write(S_POINTER, reg, nvdla_minor);
 }
 
 int
-dla_cdp_enable(struct dla_processor_group *group)
+dla_cdp_enable(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	uint32_t reg;
 	uint8_t perf_reg;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_debug("Enter: %s\n", __func__);
 
@@ -123,7 +124,7 @@ dla_cdp_enable(struct dla_processor_group *group)
 			(map_perf_lut[1] <<
 				SHIFT(CDP_D_PERF_ENABLE_0, LUT_EN));
 
-		cdp_reg_write(D_PERF_ENABLE, perf_reg);
+		cdp_reg_write(D_PERF_ENABLE, perf_reg, nvdla_minor);
 		group->start_time = dla_get_time_us();
 	}
 
@@ -131,9 +132,9 @@ dla_cdp_enable(struct dla_processor_group *group)
 	 * enable all sub-modules
 	 */
 	reg = FIELD_ENUM(CDP_RDMA_D_OP_ENABLE_0, OP_EN, ENABLE);
-	cdp_rdma_reg_write(D_OP_ENABLE, reg);
+	cdp_rdma_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 	reg = FIELD_ENUM(CDP_D_OP_ENABLE_0, OP_EN, ENABLE);
-	cdp_reg_write(D_OP_ENABLE, reg);
+	cdp_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 
 	dla_debug("Exit: %s\n", __func__);
 
@@ -147,14 +148,14 @@ dla_cdp_rdma_check(struct dla_processor_group *group)
 }
 
 static int32_t
-processor_cdp_program(struct dla_processor_group *group)
+processor_cdp_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint32_t reg, high, low;
 	uint64_t input_address = 0;
 	uint64_t output_address = 0;
 	struct dla_lut_param lut;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 	struct dla_cdp_op_desc *cdp_op;
 	struct dla_cdp_surface_desc *cdp_surface;
 
@@ -183,10 +184,11 @@ processor_cdp_program(struct dla_processor_group *group)
 
 	/* get the addresses from task descriptor */
 	ret = dla_read_input_address(&cdp_surface->src_data,
-						&input_address,
-						group->op_desc->index,
-						group->roi_index,
-						1);
+				     &input_address,
+				     group->op_desc->index,
+				     group->roi_index,
+				     1,
+				     nvdla_minor);
 	if (ret)
 		goto exit;
 
@@ -205,81 +207,81 @@ processor_cdp_program(struct dla_processor_group *group)
 	/* config CDP RDMA registers */
 	reg = ((cdp_surface->src_data.width - 1)
 		<< SHIFT(CDP_RDMA_D_DATA_CUBE_WIDTH_0, WIDTH));
-	cdp_rdma_reg_write(D_DATA_CUBE_WIDTH, reg);
+	cdp_rdma_reg_write(D_DATA_CUBE_WIDTH, reg, nvdla_minor);
 
 	reg = ((cdp_surface->src_data.height - 1)
 		<< SHIFT(CDP_RDMA_D_DATA_CUBE_HEIGHT_0, HEIGHT));
-	cdp_rdma_reg_write(D_DATA_CUBE_HEIGHT, reg);
+	cdp_rdma_reg_write(D_DATA_CUBE_HEIGHT, reg, nvdla_minor);
 
 	reg = ((cdp_surface->src_data.channel - 1)
 		<< SHIFT(CDP_RDMA_D_DATA_CUBE_CHANNEL_0, CHANNEL));
-	cdp_rdma_reg_write(D_DATA_CUBE_CHANNEL, reg);
+	cdp_rdma_reg_write(D_DATA_CUBE_CHANNEL, reg, nvdla_minor);
 
 	high = HIGH32BITS(input_address);
 	low = LOW32BITS(input_address);
-	cdp_rdma_reg_write(D_SRC_BASE_ADDR_LOW, low);
-	cdp_rdma_reg_write(D_SRC_BASE_ADDR_HIGH, high);
+	cdp_rdma_reg_write(D_SRC_BASE_ADDR_LOW, low, nvdla_minor);
+	cdp_rdma_reg_write(D_SRC_BASE_ADDR_HIGH, high, nvdla_minor);
 
 	cdp_rdma_reg_write(D_SRC_LINE_STRIDE,
-			cdp_surface->src_data.line_stride);
+			cdp_surface->src_data.line_stride, nvdla_minor);
 	cdp_rdma_reg_write(D_SRC_SURFACE_STRIDE,
-			cdp_surface->src_data.surf_stride);
+			cdp_surface->src_data.surf_stride, nvdla_minor);
 
 	reg = (map_ram[cdp_surface->src_data.type]
 		<< SHIFT(CDP_RDMA_D_SRC_DMA_CFG_0, SRC_RAM_TYPE));
-	cdp_rdma_reg_write(D_SRC_DMA_CFG, reg);
+	cdp_rdma_reg_write(D_SRC_DMA_CFG, reg, nvdla_minor);
 
 	reg = (map_precision[cdp_op->in_precision]
 		<< SHIFT(CDP_RDMA_D_DATA_FORMAT_0, INPUT_DATA));
-	cdp_rdma_reg_write(D_DATA_FORMAT, reg);
+	cdp_rdma_reg_write(D_DATA_FORMAT, reg, nvdla_minor);
 
 	/* config CDP */
 	if (cdp_op->lut_index >= 0)
-		update_lut(CDP_S_LUT_ACCESS_CFG_0, &lut, cdp_op->in_precision);
+	    update_lut(CDP_S_LUT_ACCESS_CFG_0, &lut, cdp_op->in_precision, nvdla_minor);
 
 	high = HIGH32BITS(output_address);
 	low = LOW32BITS(output_address);
-	cdp_reg_write(D_DST_BASE_ADDR_LOW, low);
-	cdp_reg_write(D_DST_BASE_ADDR_HIGH, high);
+	cdp_reg_write(D_DST_BASE_ADDR_LOW, low, nvdla_minor);
+	cdp_reg_write(D_DST_BASE_ADDR_HIGH, high, nvdla_minor);
 
-	cdp_reg_write(D_DST_LINE_STRIDE, cdp_surface->dst_data.line_stride);
-	cdp_reg_write(D_DST_SURFACE_STRIDE, cdp_surface->dst_data.surf_stride);
+	cdp_reg_write(D_DST_LINE_STRIDE, cdp_surface->dst_data.line_stride, nvdla_minor);
+	cdp_reg_write(D_DST_SURFACE_STRIDE, cdp_surface->dst_data.surf_stride, nvdla_minor);
 
 	reg = (map_ram[cdp_surface->dst_data.type]
 		<< SHIFT(CDP_D_DST_DMA_CFG_0, DST_RAM_TYPE));
-	cdp_reg_write(D_DST_DMA_CFG, reg);
+	cdp_reg_write(D_DST_DMA_CFG, reg, nvdla_minor);
 
 	reg = (map_precision[cdp_op->in_precision]
 		<< SHIFT(CDP_D_DATA_FORMAT_0, INPUT_DATA_TYPE));
-	cdp_reg_write(D_DATA_FORMAT, reg);
+	cdp_reg_write(D_DATA_FORMAT, reg, nvdla_minor);
 
 	reg = (map_local_size(cdp_op->local_size)
 		<< SHIFT(CDP_D_LRN_CFG_0, NORMALZ_LEN));
-	cdp_reg_write(D_LRN_CFG, reg);
+	cdp_reg_write(D_LRN_CFG, reg, nvdla_minor);
 
 	reg = (cdp_op->in_cvt.offset
 		<< SHIFT(CDP_D_DATIN_OFFSET_0, DATIN_OFFSET));
-	cdp_reg_write(D_DATIN_OFFSET, reg);
+	cdp_reg_write(D_DATIN_OFFSET, reg, nvdla_minor);
 
 	reg = (cdp_op->in_cvt.scale
 		<< SHIFT(CDP_D_DATIN_SCALE_0, DATIN_SCALE));
-	cdp_reg_write(D_DATIN_SCALE, reg);
+	cdp_reg_write(D_DATIN_SCALE, reg, nvdla_minor);
 
 	reg = (cdp_op->in_cvt.truncate
 		<< SHIFT(CDP_D_DATIN_SHIFTER_0, DATIN_SHIFTER));
-	cdp_reg_write(D_DATIN_SHIFTER, reg);
+	cdp_reg_write(D_DATIN_SHIFTER, reg, nvdla_minor);
 
 	reg = (cdp_op->out_cvt.offset
 		<< SHIFT(CDP_D_DATOUT_OFFSET_0, DATOUT_OFFSET));
-	cdp_reg_write(D_DATOUT_OFFSET, reg);
+	cdp_reg_write(D_DATOUT_OFFSET, reg, nvdla_minor);
 
 	reg = (cdp_op->out_cvt.scale
 		<< SHIFT(CDP_D_DATOUT_SCALE_0, DATOUT_SCALE));
-	cdp_reg_write(D_DATOUT_SCALE, reg);
+	cdp_reg_write(D_DATOUT_SCALE, reg, nvdla_minor);
 
 	reg = (cdp_op->out_cvt.truncate
 		<< SHIFT(CDP_D_DATOUT_SHIFTER_0, DATOUT_SHIFTER));
-	cdp_reg_write(D_DATOUT_SHIFTER, reg);
+	cdp_reg_write(D_DATOUT_SHIFTER, reg, nvdla_minor);
 
 	reg = ((cdp_op->bypass_sqsum ?
 		FIELD_ENUM(CDP_D_FUNC_BYPASS_0, SQSUM_BYPASS, ENABLE) :
@@ -289,7 +291,7 @@ processor_cdp_program(struct dla_processor_group *group)
 		FIELD_ENUM(CDP_D_FUNC_BYPASS_0, MUL_BYPASS, ENABLE) :
 		FIELD_ENUM(CDP_D_FUNC_BYPASS_0, MUL_BYPASS, DISABLE)) <<
 		SHIFT(CDP_D_FUNC_BYPASS_0, MUL_BYPASS));
-	cdp_reg_write(D_FUNC_BYPASS, reg);
+	cdp_reg_write(D_FUNC_BYPASS, reg, nvdla_minor);
 
 exit:
 	dla_debug("Exit: %s", __func__);
@@ -366,15 +368,16 @@ dla_cdp_dump_config(struct dla_processor_group *group)
 }
 
 int
-dla_cdp_program(struct dla_processor_group *group)
+dla_cdp_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret;
 
 	dla_debug("Enter: %s", __func__);
 	dla_enable_intr(MASK(GLB_S_INTR_MASK_0, CDP_DONE_MASK1) |
-			MASK(GLB_S_INTR_MASK_0, CDP_DONE_MASK0));
+			MASK(GLB_S_INTR_MASK_0, CDP_DONE_MASK0),
+			nvdla_minor);
 
-	ret = processor_cdp_program(group);
+	ret = processor_cdp_program(group, nvdla_minor);
 	if (ret)
 		goto exit;
 

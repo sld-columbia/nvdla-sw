@@ -37,7 +37,8 @@
 
 void update_lut(uint32_t reg_base,
 		struct dla_lut_param *lut,
-		uint8_t precision);
+		uint8_t precision,
+		int32_t nvdla_minor);
 int32_t validate_data_cube(struct dla_data_cube src_data_cube,
 			struct dla_data_cube dst_data_cube,
 			uint8_t mem_type);

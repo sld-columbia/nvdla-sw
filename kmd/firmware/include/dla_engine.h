@@ -66,13 +66,13 @@ struct dla_processor {
 
 	int32_t (*is_ready)(struct dla_processor *processor,
 				  struct dla_processor_group *group);
-	int32_t (*enable)(struct dla_processor_group *group);
-	int32_t (*program)(struct dla_processor_group *group);
-	void (*set_producer)(int32_t group_id, int32_t rdma_id);
+	int32_t (*enable)(struct dla_processor_group *group, int32_t nvdla_minor);
+	int32_t (*program)(struct dla_processor_group *group, int32_t nvdla_minor);
+	void (*set_producer)(int32_t group_id, int32_t rdma_id, int32_t nvdla_minor);
 	void (*dump_config)(struct dla_processor_group *group);
 	void (*rdma_check)(struct dla_processor_group *group);
 	void (*get_stat_data)(struct dla_processor *processor,
-				struct dla_processor_group *group);
+				struct dla_processor_group *group, int32_t nvdla_minor);
 	void (*dump_stat)(struct dla_processor *processor);
 };
 
@@ -85,10 +85,11 @@ struct dla_engine {
 	uint16_t num_proc_hwl;
 	int32_t status;
 	uint32_t stat_enable;
-
+	int32_t nvdla_minor;
+	
 	void *driver_context;
 };
 
-struct dla_engine *dla_get_engine(void);
+struct dla_engine *dla_get_engine(int32_t nvdla_minor);
 
 #endif

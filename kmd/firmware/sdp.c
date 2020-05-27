@@ -148,7 +148,8 @@ static const uint8_t map_perf_nan_inf[] = {
 #if STAT_ENABLE
 void
 dla_sdp_stat_data(struct dla_processor *processor,
-					struct dla_processor_group *group)
+		  struct dla_processor_group *group,
+		  int32_t nvdla_minor)
 {
 	uint64_t end_time = 0;
 	struct dla_sdp_stat_desc *sdp_stat;
@@ -157,10 +158,10 @@ dla_sdp_stat_data(struct dla_processor *processor,
 
 	end_time = dla_get_time_us();
 
-	sdp_stat->nan_input_num = sdp_reg_read(D_STATUS_NAN_INPUT_NUM);
-	sdp_stat->inf_input_num = sdp_reg_read(D_STATUS_INF_INPUT_NUM);
-	sdp_stat->nan_output_num = sdp_reg_read(D_STATUS_NAN_OUTPUT_NUM);
-	sdp_stat->wdma_write_stall = sdp_reg_read(D_PERF_WDMA_WRITE_STALL);
+	sdp_stat->nan_input_num = sdp_reg_read(D_STATUS_NAN_INPUT_NUM, nvdla_minor);
+	sdp_stat->inf_input_num = sdp_reg_read(D_STATUS_INF_INPUT_NUM, nvdla_minor);
+	sdp_stat->nan_output_num = sdp_reg_read(D_STATUS_NAN_OUTPUT_NUM, nvdla_minor);
+	sdp_stat->wdma_write_stall = sdp_reg_read(D_PERF_WDMA_WRITE_STALL, nvdla_minor);
 	sdp_stat->runtime = (uint32_t)(end_time - group->start_time);
 }
 
@@ -176,7 +177,7 @@ dla_sdp_dump_stat(struct dla_processor *processor)
 #endif /* STAT_ENABLE */
 
 void
-dla_sdp_set_producer(int32_t group_id, int32_t rdma_group_id)
+dla_sdp_set_producer(int32_t group_id, int32_t rdma_group_id, int32_t nvdla_minor)
 {
 	uint32_t reg;
 
@@ -184,17 +185,17 @@ dla_sdp_set_producer(int32_t group_id, int32_t rdma_group_id)
 	 * set producer pointer for all sub-modules
 	 */
 	reg = group_id << SHIFT(SDP_S_POINTER_0, PRODUCER);
-	sdp_reg_write(S_POINTER, reg);
+	sdp_reg_write(S_POINTER, reg, nvdla_minor);
 	reg = rdma_group_id << SHIFT(SDP_RDMA_S_POINTER_0, PRODUCER);
-	sdp_rdma_reg_write(S_POINTER, reg);
+	sdp_rdma_reg_write(S_POINTER, reg, nvdla_minor);
 }
 
 int
-dla_sdp_enable(struct dla_processor_group *group)
+dla_sdp_enable(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	uint32_t reg;
 	uint8_t perf_reg;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 
 	dla_trace("Enter: %s", __func__);
 
@@ -208,7 +209,7 @@ dla_sdp_enable(struct dla_processor_group *group)
 			(map_perf_nan_inf[1] <<
 			SHIFT(SDP_D_PERF_ENABLE_0, PERF_NAN_INF_COUNT_EN));
 
-		sdp_reg_write(D_PERF_ENABLE, perf_reg);
+		sdp_reg_write(D_PERF_ENABLE, perf_reg, nvdla_minor);
 		group->start_time = dla_get_time_us();
 	}
 
@@ -217,10 +218,10 @@ dla_sdp_enable(struct dla_processor_group *group)
 	 */
 	if (group->is_rdma_needed) {
 		reg = FIELD_ENUM(SDP_RDMA_D_OP_ENABLE_0, OP_EN, ENABLE);
-		sdp_rdma_reg_write(D_OP_ENABLE, reg);
+		sdp_rdma_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 	}
 	reg = FIELD_ENUM(SDP_D_OP_ENABLE_0, OP_EN, ENABLE);
-	sdp_reg_write(D_OP_ENABLE, reg);
+	sdp_reg_write(D_OP_ENABLE, reg, nvdla_minor);
 
 	dla_trace("Exit: %s", __func__);
 
@@ -255,7 +256,7 @@ dla_sdp_rdma_check(struct dla_processor_group *group)
 }
 
 static int32_t
-processor_sdp_program(struct dla_processor_group *group)
+processor_sdp_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret = 0;
 	uint64_t src_addr = -1, x1_addr = -1, x2_addr = -1;
@@ -271,7 +272,7 @@ processor_sdp_program(struct dla_processor_group *group)
 	uint8_t y_rdma_ena;
 	uint8_t out_dma_ena;
 	struct dla_lut_param lut;
-	struct dla_engine *engine = dla_get_engine();
+	struct dla_engine *engine = dla_get_engine(nvdla_minor);
 	struct dla_sdp_op_desc *sdp_op;
 	struct dla_sdp_surface_desc *sdp_surface;
 
@@ -293,10 +294,11 @@ processor_sdp_program(struct dla_processor_group *group)
 	/* load address */
 	if (!fly) {
 		ret = dla_read_input_address(&sdp_surface->src_data,
-						&src_addr,
-						group->op_desc->index,
-						group->roi_index,
-					    1);
+					     &src_addr,
+					     group->op_desc->index,
+					     group->roi_index,
+					     1,
+					     nvdla_minor);
 		if (ret)
 			goto exit;
 		CHECK_ALIGN(src_addr, atom_size);
@@ -352,14 +354,14 @@ processor_sdp_program(struct dla_processor_group *group)
 	}
 
 	reg = (map_fly[0] << SHIFT(SDP_RDMA_D_FEATURE_MODE_CFG_0, FLYING_MODE));
-	sdp_rdma_reg_write(D_FEATURE_MODE_CFG, reg);
+	sdp_rdma_reg_write(D_FEATURE_MODE_CFG, reg, nvdla_minor);
 
 	reg = (map_ena[1] << SHIFT(SDP_RDMA_D_BRDMA_CFG_0, BRDMA_DISABLE));
-	sdp_rdma_reg_write(D_BRDMA_CFG, reg);
+	sdp_rdma_reg_write(D_BRDMA_CFG, reg, nvdla_minor);
 	reg = (map_ena[1] << SHIFT(SDP_RDMA_D_NRDMA_CFG_0, NRDMA_DISABLE));
-	sdp_rdma_reg_write(D_NRDMA_CFG, reg);
+	sdp_rdma_reg_write(D_NRDMA_CFG, reg, nvdla_minor);
 	reg = (map_ena[1] << SHIFT(SDP_RDMA_D_ERDMA_CFG_0, ERDMA_DISABLE));
-	sdp_rdma_reg_write(D_ERDMA_CFG, reg);
+	sdp_rdma_reg_write(D_ERDMA_CFG, reg, nvdla_minor);
 
 	reg = (map_fly[fly] <<
 			SHIFT(SDP_RDMA_D_FEATURE_MODE_CFG_0, FLYING_MODE)) |
@@ -373,16 +375,16 @@ processor_sdp_program(struct dla_processor_group *group)
 			SHIFT(SDP_RDMA_D_FEATURE_MODE_CFG_0, PROC_PRECISION)) |
 	((sdp_op->batch_num-1) <<
 			SHIFT(SDP_RDMA_D_FEATURE_MODE_CFG_0, BATCH_NUMBER));
-	sdp_rdma_reg_write(D_FEATURE_MODE_CFG, reg);
+	sdp_rdma_reg_write(D_FEATURE_MODE_CFG, reg, nvdla_minor);
 
 	if (group->is_rdma_needed) {
 
 		sdp_rdma_reg_write(D_DATA_CUBE_WIDTH,
-					sdp_surface->src_data.width - 1);
+					sdp_surface->src_data.width - 1, nvdla_minor);
 		sdp_rdma_reg_write(D_DATA_CUBE_HEIGHT,
-					sdp_surface->src_data.height - 1);
+					sdp_surface->src_data.height - 1, nvdla_minor);
 		sdp_rdma_reg_write(D_DATA_CUBE_CHANNEL,
-					sdp_surface->src_data.channel - 1);
+					sdp_surface->src_data.channel - 1, nvdla_minor);
 
 		/* config SDP source info */
 		if (!fly) {
@@ -392,14 +394,14 @@ processor_sdp_program(struct dla_processor_group *group)
 			 */
 			high = HIGH32BITS(src_addr);
 			low = LOW32BITS(src_addr);
-			sdp_rdma_reg_write(D_SRC_BASE_ADDR_LOW, low);
-			sdp_rdma_reg_write(D_SRC_BASE_ADDR_HIGH, high);
+			sdp_rdma_reg_write(D_SRC_BASE_ADDR_LOW, low, nvdla_minor);
+			sdp_rdma_reg_write(D_SRC_BASE_ADDR_HIGH, high, nvdla_minor);
 			sdp_rdma_reg_write(D_SRC_LINE_STRIDE,
-					sdp_surface->src_data.line_stride);
+					sdp_surface->src_data.line_stride, nvdla_minor);
 			sdp_rdma_reg_write(D_SRC_SURFACE_STRIDE,
-					sdp_surface->src_data.surf_stride);
+					sdp_surface->src_data.surf_stride, nvdla_minor);
 			sdp_rdma_reg_write(D_SRC_DMA_CFG,
-				map_ram_type[sdp_surface->src_data.type]);
+				map_ram_type[sdp_surface->src_data.type], nvdla_minor);
 		}
 
 		/* config x1 source info */
@@ -418,19 +420,19 @@ processor_sdp_program(struct dla_processor_group *group)
 			(map_ram_type[sdp_surface->x1_data.type] <<
 				SHIFT(SDP_RDMA_D_BRDMA_CFG_0,
 				BRDMA_RAM_TYPE));
-		sdp_rdma_reg_write(D_BRDMA_CFG, reg);
+		sdp_rdma_reg_write(D_BRDMA_CFG, reg, nvdla_minor);
 
 		if (x1_rdma_ena) {
 			high = HIGH32BITS(x1_addr);
 			low = LOW32BITS(x1_addr);
 			sdp_rdma_reg_write(D_BS_BASE_ADDR_LOW,
-					low);
+					low, nvdla_minor);
 			sdp_rdma_reg_write(D_BS_BASE_ADDR_HIGH,
-					high);
+					high, nvdla_minor);
 			sdp_rdma_reg_write(D_BS_LINE_STRIDE,
-					sdp_surface->x1_data.line_stride);
+					sdp_surface->x1_data.line_stride, nvdla_minor);
 			sdp_rdma_reg_write(D_BS_SURFACE_STRIDE,
-					sdp_surface->x1_data.surf_stride);
+					sdp_surface->x1_data.surf_stride, nvdla_minor);
 		}
 
 		/* config x2 source info */
@@ -450,19 +452,19 @@ processor_sdp_program(struct dla_processor_group *group)
 					SHIFT(SDP_RDMA_D_NRDMA_CFG_0,
 					NRDMA_RAM_TYPE));
 
-		sdp_rdma_reg_write(D_NRDMA_CFG, reg);
+		sdp_rdma_reg_write(D_NRDMA_CFG, reg, nvdla_minor);
 
 		if (x2_rdma_ena) {
 			high = HIGH32BITS(x2_addr);
 			low = LOW32BITS(x2_addr);
 			sdp_rdma_reg_write(D_BN_BASE_ADDR_LOW,
-					low);
+					low, nvdla_minor);
 			sdp_rdma_reg_write(D_BN_BASE_ADDR_HIGH,
-					high);
+					high, nvdla_minor);
 			sdp_rdma_reg_write(D_BN_LINE_STRIDE,
-					sdp_surface->x2_data.line_stride);
+					sdp_surface->x2_data.line_stride, nvdla_minor);
 			sdp_rdma_reg_write(D_BN_SURFACE_STRIDE,
-					sdp_surface->x2_data.surf_stride);
+					sdp_surface->x2_data.surf_stride, nvdla_minor);
 		}
 
 		/* config y source info */
@@ -482,40 +484,40 @@ processor_sdp_program(struct dla_processor_group *group)
 				SHIFT(SDP_RDMA_D_ERDMA_CFG_0,
 				ERDMA_RAM_TYPE));
 
-		sdp_rdma_reg_write(D_ERDMA_CFG, reg);
+		sdp_rdma_reg_write(D_ERDMA_CFG, reg, nvdla_minor);
 		if (y_rdma_ena) {
 			high = HIGH32BITS(y_addr);
 			low = LOW32BITS(y_addr);
 			sdp_rdma_reg_write(D_EW_BASE_ADDR_LOW,
-					low);
+					low, nvdla_minor);
 			sdp_rdma_reg_write(D_EW_BASE_ADDR_HIGH,
-					high);
+					high, nvdla_minor);
 			sdp_rdma_reg_write(D_EW_LINE_STRIDE,
-					sdp_surface->y_data.line_stride);
+					sdp_surface->y_data.line_stride, nvdla_minor);
 			sdp_rdma_reg_write(D_EW_SURFACE_STRIDE,
-					sdp_surface->y_data.surf_stride);
+					sdp_surface->y_data.surf_stride, nvdla_minor);
 		}
 	}
 
 	if (sdp_op->lut_index >= 0)
 		update_lut(SDP_S_LUT_ACCESS_CFG_0, &lut,
-					sdp_op->src_precision);
+			   sdp_op->src_precision, nvdla_minor);
 
-	sdp_reg_write(D_DATA_CUBE_WIDTH, sdp_surface->src_data.width - 1);
-	sdp_reg_write(D_DATA_CUBE_HEIGHT, sdp_surface->src_data.height - 1);
-	sdp_reg_write(D_DATA_CUBE_CHANNEL, sdp_surface->src_data.channel - 1);
+	sdp_reg_write(D_DATA_CUBE_WIDTH, sdp_surface->src_data.width - 1, nvdla_minor);
+	sdp_reg_write(D_DATA_CUBE_HEIGHT, sdp_surface->src_data.height - 1, nvdla_minor);
+	sdp_reg_write(D_DATA_CUBE_CHANNEL, sdp_surface->src_data.channel - 1, nvdla_minor);
 
 	if (out_dma_ena) {
 		high = HIGH32BITS(dst_addr);
 		low = LOW32BITS(dst_addr);
 		sdp_reg_write(D_DST_BASE_ADDR_HIGH,
-				high);
+				high, nvdla_minor);
 		sdp_reg_write(D_DST_BASE_ADDR_LOW,
-				low);
+				low, nvdla_minor);
 		sdp_reg_write(D_DST_LINE_STRIDE,
-				sdp_surface->dst_data.line_stride);
+				sdp_surface->dst_data.line_stride, nvdla_minor);
 		sdp_reg_write(D_DST_SURFACE_STRIDE,
-				sdp_surface->dst_data.surf_stride);
+				sdp_surface->dst_data.surf_stride, nvdla_minor);
 	}
 
 	/* Config BS module */
@@ -539,7 +541,7 @@ processor_sdp_program(struct dla_processor_group *group)
 		(map_bypass[x1_op->act == ACTIVATION_RELU] <<
 			SHIFT(SDP_D_DP_BS_CFG_0,
 			BS_RELU_BYPASS));
-	sdp_reg_write(D_DP_BS_CFG, reg);
+	sdp_reg_write(D_DP_BS_CFG, reg, nvdla_minor);
 
 	if (x1_op->enable) {
 		if (x1_op->type == SDP_OP_ADD ||
@@ -550,14 +552,14 @@ processor_sdp_program(struct dla_processor_group *group)
 				(x1_op->shift_value <<
 					SHIFT(SDP_D_DP_BS_ALU_CFG_0,
 					BS_ALU_SHIFT_VALUE));
-			sdp_reg_write(D_DP_BS_ALU_CFG, reg);
+			sdp_reg_write(D_DP_BS_ALU_CFG, reg, nvdla_minor);
 		}
 
 		if (x1_op->mode == SDP_OP_PER_LAYER) {
 			sdp_reg_write(D_DP_BS_ALU_SRC_VALUE,
-					x1_op->alu_operand);
+					x1_op->alu_operand, nvdla_minor);
 			sdp_reg_write(D_DP_BS_MUL_SRC_VALUE,
-					x1_op->mul_operand);
+					x1_op->mul_operand, nvdla_minor);
 		}
 
 		/**
@@ -570,7 +572,7 @@ processor_sdp_program(struct dla_processor_group *group)
 		(x1_op->truncate <<
 			SHIFT(SDP_D_DP_BS_MUL_CFG_0,
 			BS_MUL_SHIFT_VALUE));
-		sdp_reg_write(D_DP_BS_MUL_CFG, reg);
+		sdp_reg_write(D_DP_BS_MUL_CFG, reg, nvdla_minor);
 	}
 
 	/* Config BN module */
@@ -594,7 +596,7 @@ processor_sdp_program(struct dla_processor_group *group)
 		(map_bypass[x2_op->act == ACTIVATION_RELU]
 			<< SHIFT(SDP_D_DP_BN_CFG_0,
 			BN_RELU_BYPASS));
-	sdp_reg_write(D_DP_BN_CFG, reg);
+	sdp_reg_write(D_DP_BN_CFG, reg, nvdla_minor);
 
 	if (x2_op->enable) {
 		if (x2_op->type == SDP_OP_ADD ||
@@ -605,14 +607,14 @@ processor_sdp_program(struct dla_processor_group *group)
 				(x2_op->shift_value <<
 					SHIFT(SDP_D_DP_BN_ALU_CFG_0,
 					BN_ALU_SHIFT_VALUE));
-			sdp_reg_write(D_DP_BN_ALU_CFG, reg);
+			sdp_reg_write(D_DP_BN_ALU_CFG, reg, nvdla_minor);
 		}
 
 		if (x2_op->mode == SDP_OP_PER_LAYER) {
 			sdp_reg_write(D_DP_BN_ALU_SRC_VALUE,
-					x2_op->alu_operand);
+					x2_op->alu_operand, nvdla_minor);
 			sdp_reg_write(D_DP_BN_MUL_SRC_VALUE,
-					x2_op->mul_operand);
+					x2_op->mul_operand, nvdla_minor);
 		}
 
 		reg = (map_alu_src[x2_op->mode == SDP_OP_PER_LAYER] <<
@@ -621,7 +623,7 @@ processor_sdp_program(struct dla_processor_group *group)
 			(x2_op->truncate <<
 				SHIFT(SDP_D_DP_BN_MUL_CFG_0,
 				BN_MUL_SHIFT_VALUE));
-		sdp_reg_write(D_DP_BN_MUL_CFG, reg);
+		sdp_reg_write(D_DP_BN_MUL_CFG, reg, nvdla_minor);
 	}
 
 	/* Config EW module */
@@ -645,7 +647,7 @@ processor_sdp_program(struct dla_processor_group *group)
 		(map_bypass[y_op->act == ACTIVATION_LUT] <<
 			SHIFT(SDP_D_DP_EW_CFG_0,
 			EW_LUT_BYPASS));
-	sdp_reg_write(D_DP_EW_CFG, reg);
+	sdp_reg_write(D_DP_EW_CFG, reg, nvdla_minor);
 
 	if (y_op->enable) {
 		if (y_op->type == SDP_OP_ADD || y_op->type == SDP_OP_BOTH) {
@@ -655,18 +657,18 @@ processor_sdp_program(struct dla_processor_group *group)
 				(map_bypass[y_op->cvt.alu_cvt.enable] <<
 					SHIFT(SDP_D_DP_EW_ALU_CFG_0,
 					EW_ALU_CVT_BYPASS));
-			sdp_reg_write(D_DP_EW_ALU_CFG, reg);
+			sdp_reg_write(D_DP_EW_ALU_CFG, reg, nvdla_minor);
 
 			if (y_op->mode == SDP_OP_PER_LAYER) {
 				sdp_reg_write(D_DP_EW_ALU_SRC_VALUE,
-						y_op->alu_operand);
+						y_op->alu_operand, nvdla_minor);
 			} else {
 				sdp_reg_write(D_DP_EW_ALU_CVT_OFFSET_VALUE,
-						y_op->cvt.alu_cvt.offset);
+						y_op->cvt.alu_cvt.offset, nvdla_minor);
 				sdp_reg_write(D_DP_EW_ALU_CVT_SCALE_VALUE,
-						y_op->cvt.alu_cvt.scale);
+						y_op->cvt.alu_cvt.scale, nvdla_minor);
 				sdp_reg_write(D_DP_EW_ALU_CVT_TRUNCATE_VALUE,
-						y_op->cvt.alu_cvt.truncate);
+						y_op->cvt.alu_cvt.truncate, nvdla_minor);
 			}
 		}
 
@@ -677,22 +679,22 @@ processor_sdp_program(struct dla_processor_group *group)
 				(map_bypass[y_op->cvt.mul_cvt.enable] <<
 					SHIFT(SDP_D_DP_EW_MUL_CFG_0,
 					EW_MUL_CVT_BYPASS));
-			sdp_reg_write(D_DP_EW_MUL_CFG, reg);
+			sdp_reg_write(D_DP_EW_MUL_CFG, reg, nvdla_minor);
 
 			if (y_op->mode == SDP_OP_PER_LAYER) {
 				sdp_reg_write(D_DP_EW_MUL_SRC_VALUE,
-						y_op->mul_operand);
+						y_op->mul_operand, nvdla_minor);
 			} else {
 				sdp_reg_write(D_DP_EW_MUL_CVT_OFFSET_VALUE,
-						y_op->cvt.mul_cvt.offset);
+						y_op->cvt.mul_cvt.offset, nvdla_minor);
 				sdp_reg_write(D_DP_EW_MUL_CVT_SCALE_VALUE,
-						y_op->cvt.mul_cvt.scale);
+						y_op->cvt.mul_cvt.scale, nvdla_minor);
 				sdp_reg_write(D_DP_EW_MUL_CVT_TRUNCATE_VALUE,
-						y_op->cvt.mul_cvt.truncate);
+						y_op->cvt.mul_cvt.truncate, nvdla_minor);
 			}
 		}
 
-		sdp_reg_write(D_DP_EW_TRUNCATE_VALUE, y_op->truncate);
+		sdp_reg_write(D_DP_EW_TRUNCATE_VALUE, y_op->truncate, nvdla_minor);
 	}
 
 	reg = (map_fly[sdp_surface->src_data.type == DLA_MEM_HW] <<
@@ -707,11 +709,11 @@ processor_sdp_program(struct dla_processor_group *group)
 		((sdp_op->batch_num - 1) <<
 			SHIFT(SDP_D_FEATURE_MODE_CFG_0,
 			BATCH_NUMBER));
-	sdp_reg_write(D_FEATURE_MODE_CFG, reg);
+	sdp_reg_write(D_FEATURE_MODE_CFG, reg, nvdla_minor);
 	sdp_reg_write(D_DST_DMA_CFG,
-			map_ram_type[sdp_surface->dst_data.type]);
+			map_ram_type[sdp_surface->dst_data.type], nvdla_minor);
 	if (sdp_op->batch_num > 1)
-		sdp_reg_write(D_DST_BATCH_STRIDE, sdp_op->batch_stride);
+		sdp_reg_write(D_DST_BATCH_STRIDE, sdp_op->batch_stride, nvdla_minor);
 
 	reg =
 	(map_proc_precision[sdp_op->dst_precision][sdp_op->src_precision] <<
@@ -720,10 +722,10 @@ processor_sdp_program(struct dla_processor_group *group)
 		(map_precision[sdp_op->dst_precision] <<
 			SHIFT(SDP_D_DATA_FORMAT_0,
 			OUT_PRECISION));
-	sdp_reg_write(D_DATA_FORMAT, reg);
-	sdp_reg_write(D_CVT_OFFSET, sdp_op->out_cvt.offset);
-	sdp_reg_write(D_CVT_SCALE, sdp_op->out_cvt.scale);
-	sdp_reg_write(D_CVT_SHIFT, sdp_op->out_cvt.truncate);
+	sdp_reg_write(D_DATA_FORMAT, reg, nvdla_minor);
+	sdp_reg_write(D_CVT_OFFSET, sdp_op->out_cvt.offset, nvdla_minor);
+	sdp_reg_write(D_CVT_SCALE, sdp_op->out_cvt.scale, nvdla_minor);
+	sdp_reg_write(D_CVT_SHIFT, sdp_op->out_cvt.truncate, nvdla_minor);
 
 exit:
 	dla_trace("Exit: %s", __func__);
@@ -799,15 +801,16 @@ dla_sdp_dump_config(struct dla_processor_group *group)
 }
 
 int
-dla_sdp_program(struct dla_processor_group *group)
+dla_sdp_program(struct dla_processor_group *group, int32_t nvdla_minor)
 {
 	int32_t ret;
 
 	dla_trace("Enter: %s", __func__);
 	dla_enable_intr(MASK(GLB_S_INTR_MASK_0, SDP_DONE_MASK1) |
-			MASK(GLB_S_INTR_MASK_0, SDP_DONE_MASK0));
+			MASK(GLB_S_INTR_MASK_0, SDP_DONE_MASK0),
+			nvdla_minor);
 
-	ret = processor_sdp_program(group);
+	ret = processor_sdp_program(group, nvdla_minor);
 	if (ret)
 		goto exit;
 
