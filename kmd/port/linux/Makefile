@@ -30,11 +30,14 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+VERBOSE ?= 1
+
 obj-m += opendla.o
 
 ccflags-y += -I$(src)/include
 ccflags-y += -I$(src)/../../include
 ccflags-y += -Werror
+ccflags-y += -DVERBOSE=$(VERBOSE)
 
 include $(src)/../../firmware/Makefile
 

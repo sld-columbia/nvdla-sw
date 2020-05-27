@@ -86,18 +86,22 @@ static struct nvdla_config nvdla_config_large = {
 
 void dla_debug(const char *str, ...)
 {
-	/* va_list args; */
-	/* va_start(args, str); */
-	/* vprintk(pr_fmt(str), args); */
-	/* va_end(args); */
+#if (VERBOSE == 1)
+	va_list args;
+	va_start(args, str);
+	vprintk(pr_fmt(str), args);
+	va_end(args);
+#endif
 }
 
 void dla_info(const char *str, ...)
 {
-	/* va_list args; */
-	/* va_start(args, str); */
-	/* vprintk(str, args); */
-	/* va_end(args); */
+#if (VERBOSE == 1)
+	va_list args;
+	va_start(args, str);
+	vprintk(str, args);
+	va_end(args);
+#endif
 }
 
 void dla_warn(const char *str, ...)
@@ -423,13 +427,8 @@ static int32_t nvdla_probe(struct platform_device *pdev)
 
 	drm = nvdla_dev->drm; 
 	
-	dla_info("minor primary %d minor render %d\n",
-		 drm->primary->index,
-		 drm->render->index);
-
 	dla_register_driver(&nvdla_dev->engine_context, (void *)nvdla_dev, drm->primary->index);
 	dla_clear_task(nvdla_dev->engine_context);
-
 
 	return err;
 }
