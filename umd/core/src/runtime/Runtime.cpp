@@ -219,7 +219,9 @@ void *Runtime::getDLADeviceContext(size_t sel_i)
         err = NvDlaOpen((void *)m_dla_handle, sel_i, (void **)&m_dla_device_handles[sel_i]);
         ok = err == NvDlaSuccess;
         if ( !ok ) {
-            gLogError << "failed to open dla device" << endl;
+	    // Do not print this error, it's not really an error. It's ok if
+            // there are less NVLDA instances than the maximum allowed.
+            // gLogError << "failed to open dla device" << endl;
             m_dla_device_handles[sel_i] = 0;
         }
     }
