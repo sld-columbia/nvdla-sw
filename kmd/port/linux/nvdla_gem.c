@@ -39,6 +39,11 @@
 #include <nvdla_linux.h>
 #include <nvdla_ioctl.h>
 
+#include <nvdla_interface.h>
+#include <nvdla_linux.h>
+#include <nvdla_ioctl.h>
+#include <dla_engine.h>
+
 #define to_nvdla_obj(x) container_of(x, struct nvdla_gem_object, object)
 
 struct nvdla_gem_object {
@@ -416,12 +421,15 @@ static struct drm_driver nvdla_drm_driver = {
 	.patchlevel = 0,
 };
 
-int32_t nvdla_drm_probe(struct nvdla_device *nvdla_dev)
+int32_t nvdla_drm_probe(struct nvdla_device *nvdla_dev,
+			struct reserved_mem *rmem,
+			uint32_t ndev)
 {
 	int32_t dma;
 	int32_t err;
 	struct drm_device *drm;
 	struct drm_driver *driver = &nvdla_drm_driver;
+	uint32_t phys_addr, size, n_pages;
 
 	drm = drm_dev_alloc(driver, &nvdla_dev->pdev->dev);
 	if (IS_ERR(drm))
@@ -433,12 +441,18 @@ int32_t nvdla_drm_probe(struct nvdla_device *nvdla_dev)
 	if (err < 0)
 		goto unref;
 
+	// read size and base address of reserved memory in the device tree
+	// TODO the address alignment of phys_addr may cause problems
+	n_pages = rmem->size / PAGE_SIZE;
+	n_pages -= (n_pages % ndev);
+	size = (n_pages * PAGE_SIZE) / ndev;
+	phys_addr = rmem->base + size * drm->primary->index;
+
 	/**
 	 * TODO Register separate driver for memory and use DT node to
 	 * read memory range
 	 */
-	dma = dma_declare_coherent_memory(drm->dev, 0xb0000000, 0xb0000000,
-					  0x10000000);
+	dma = dma_declare_coherent_memory(drm->dev, phys_addr, phys_addr, size);
 	if (dma) {
 		err = -ENOMEM;
 		goto unref;

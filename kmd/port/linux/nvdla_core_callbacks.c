@@ -381,6 +381,9 @@ static int32_t nvdla_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	const struct of_device_id *match;
 	struct drm_device *drm;
+	struct device_node *target;
+	struct reserved_mem *rmem;
+	uint32_t ndev;
 	
 	if (!pdev->dev.of_node)
 		return -EINVAL;
@@ -421,7 +424,22 @@ static int32_t nvdla_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	err = nvdla_drm_probe(nvdla_dev);
+	// extract reserved memory information in the device tree
+        target = of_parse_phandle(pdev->dev.of_node, "memory-region", 0);
+        if (!target)
+                return -ENODEV;
+
+	rmem = of_reserved_mem_lookup(target);
+	if (!rmem || !rmem->ops || !rmem->ops->device_init)
+		return -EINVAL;
+
+	// count NVDLA devices in the device tree
+	ndev = 0;
+	for_each_matching_node(pdev->dev.of_node, of_match_ptr(nvdla_of_match)) {
+		ndev++;
+	}
+
+	err = nvdla_drm_probe(nvdla_dev, rmem, ndev);
 	if (err)
 		dev_err(&pdev->dev, "failed to register drm device\n");
 

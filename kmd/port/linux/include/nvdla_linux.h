@@ -43,6 +43,7 @@
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/uaccess.h>
+#include <linux/of_reserved_mem.h>
 
 /**
  * @brief			Task information submitted from user space
@@ -141,7 +142,9 @@ int32_t nvdla_gem_dma_addr(struct drm_device *dev, struct drm_file *file,
  * @return			0 on success and negative on error
  *
  */
-int32_t nvdla_drm_probe(struct nvdla_device *nvdla_dev);
+int32_t nvdla_drm_probe(struct nvdla_device *nvdla_dev,
+			struct reserved_mem *rmem,
+			uint32_t ndev);
 
 /**
  * @brief			DRM remove
